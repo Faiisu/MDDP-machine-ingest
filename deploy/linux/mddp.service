@@ -1,0 +1,17 @@
+[Unit]
+Description=MDDP Ingestion Control Suite Service
+After=network.target postgresql.service mosquitto.service
+Wants=network-online.target
+
+[Service]
+Type=forking
+User=__SERVICE_USER__
+WorkingDirectory=__PROJECT_ROOT__
+ExecStart=__PROJECT_ROOT__/deploy/linux/run.sh
+ExecStop=__PROJECT_ROOT__/deploy/linux/stop.sh
+Restart=always
+RestartSec=10
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

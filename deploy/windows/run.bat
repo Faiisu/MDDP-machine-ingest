@@ -2,6 +2,8 @@
 rem See: docs/architecture/context.md
 rem English comments only
 
+cd /d "%~dp0..\.."
+
 set "PORTAL_PID_FILE=.portal.pid"
 set "DAQ_PID_FILE=.daq.pid"
 set "MUSASHI_IV_PID_FILE=.musashi_iv.pid"
@@ -16,7 +18,7 @@ goto :start_services
 
 :already_running
 echo [SYSTEM] Warning: PID files detected. Services may already be running.
-echo [SYSTEM] Please run stop.bat before starting again.
+echo [SYSTEM] Please run deploy\windows\stop.bat before starting again.
 exit /b 1
 
 :start_services

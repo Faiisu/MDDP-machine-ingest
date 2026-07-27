@@ -26,6 +26,7 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.json')
 PID_PATH = os.path.join(os.path.dirname(__file__), '.daq_process.pid')
 MODE_PATH = os.path.join(os.path.dirname(__file__), '.daq_process.mode')
+DESIRED_STATE_PATH = os.path.join(os.path.dirname(__file__), '.daq_desired_state.json')
 LOG_PATH = os.path.join(os.path.dirname(__file__), 'daq_pipeline.log')
 
 # Global monitoring variables
@@ -51,6 +52,24 @@ def write_config(config_data):
     except Exception as e:
         print(f"Error writing config.json: {e}")
         return False
+
+def read_desired_state():
+    """Reads persistent desired state metadata."""
+    try:
+        if os.path.exists(DESIRED_STATE_PATH):
+            with open(DESIRED_STATE_PATH, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"Error reading desired state: {e}")
+    return {"is_running": False, "mode": "mockup"}
+
+def write_desired_state(is_running, mode="mockup"):
+    """Writes persistent desired state metadata across system reboots."""
+    try:
+        with open(DESIRED_STATE_PATH, 'w') as f:
+            json.dump({"is_running": is_running, "mode": mode}, f, indent=2)
+    except Exception as e:
+        print(f"Error writing desired state: {e}")
 
 # Cross-platform utility to check if a process is still active on the host OS
 def is_pid_running(pid):
@@ -327,6 +346,7 @@ def handle_start(data):
         return
         
     run_mode = data.get('mode', 'mockup')
+    write_desired_state(True, run_mode)
     dest = read_config().get('DESTINATION', 'database')
     script_name = "mockup_stream_to_db.py" if run_mode == "mockup" else "stream_to_db.py"
     script_path = os.path.join(os.path.dirname(__file__), script_name)
@@ -394,6 +414,8 @@ def handle_stop():
             except: pass
         return
         
+    current_state = read_desired_state()
+    write_desired_state(False, current_state.get('mode', 'mockup'))
     socketio.emit('log_update', {'log': f'[SYSTEM] Terminating process (PID: {pid})...'})
     
     # 1. Stop log tailing thread
@@ -419,6 +441,12 @@ pid, mode = get_running_process()
 if pid is not None:
     print(f"[SYSTEM] Detected active background process running (PID: {pid}). Re-attaching...")
     start_tailing()
+else:
+    desired_state = read_desired_state()
+    if desired_state.get('is_running', False):
+        saved_mode = desired_state.get('mode', 'mockup')
+        print(f"[SYSTEM] Device restart detected! Auto-resuming DAQ ingestion in MODE={saved_mode.upper()}...")
+        handle_start({'mode': saved_mode})
 
 if __name__ == '__main__':
     # Served on Port 8081

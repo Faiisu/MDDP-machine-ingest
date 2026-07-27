@@ -8,8 +8,6 @@ This document provides step-by-step instructions for deploying the MDDP Ingestio
 
 1. [Prerequisites](#1-prerequisites)
 2. [Database & Broker Setup](#2-database--broker-setup)
-   - [Option A: Docker Desktop](#option-a-docker-desktop-recommended)
-   - [Option B: Native Installation](#option-b-native-installation-without-docker)
 3. [Project Setup](#3-project-setup)
 4. [Manual Startup (Testing)](#4-manual-startup-testing)
 5. [24-Hour Background Operation (Task Scheduler)](#5-24-hour-background-operation-task-scheduler)
@@ -34,12 +32,10 @@ Before starting deployment, ensure the following are installed on the Windows ma
 | **Advantech DAQNavi SDK** | Latest | USB-4716 hardware driver (Real Hardware Mode) | [Advantech Support](https://www.advantech.com/en/support/details/driver?id=1-RNKLZI) |
 | **Git** *(optional)* | Latest | Clone project repository | [git-scm.com](https://git-scm.com/) |
 
-### Required for Database & Broker (Choose One)
+### Required Infrastructure
 
-| Option | Software | Purpose |
-|:---|:---|:---|
-| **A** (Recommended) | Docker Desktop for Windows | Runs TimescaleDB + Mosquitto in containers |
-| **B** (No Docker) | PostgreSQL 16 + Mosquitto | Native Windows installation |
+- **PostgreSQL 16 with TimescaleDB** (Time-series database engine)
+- **Mosquitto MQTT Broker** (Optional: only needed if using MQTT output mode)
 
 ### Python Installation Notes
 
@@ -66,52 +62,7 @@ The suite requires two infrastructure services:
 - **TimescaleDB** (PostgreSQL with time-series extensions) — port `5432`
 - **Mosquitto MQTT Broker** — port `1883` *(only if using MQTT destination mode)*
 
-### Option A: Docker Desktop (Recommended)
-
-#### Install Docker Desktop
-
-1. Download [Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows-install/).
-2. Install and restart your PC if prompted.
-3. Open Docker Desktop and ensure the Docker Engine is running (system tray icon shows green).
-
-> 💡 **WSL 2 Backend**: Docker Desktop uses WSL 2 by default on modern Windows. If prompted, follow the WSL 2 installation instructions.
-
-#### Start Database Containers
-
-Open a **Command Prompt** or **PowerShell** in the project directory and run:
-
-```cmd
-docker compose up -d
-```
-
-**Expected output:**
-```
-[+] Running 2/2
- ✔ Container daq_tsdb   Started
- ✔ Container daq_mqtt   Started
-```
-
-Verify containers are running:
-```cmd
-docker ps
-```
-
-You should see `daq_tsdb` (TimescaleDB) and `daq_mqtt` (Mosquitto) containers.
-
-#### Auto-Start Containers on Boot
-
-Docker Desktop has a **"Start Docker Desktop when you sign in"** option in Settings → General. With `restart: unless-stopped` in `docker-compose.yml`, your database containers will auto-restart when Docker starts.
-
-For truly headless (pre-login) operation, you can configure Docker Desktop to run as a Windows Service using:
-```cmd
-sc create DockerDesktop binPath= "C:\Program Files\Docker\Docker\Docker Desktop.exe"
-```
-
----
-
-### Option B: Native Installation (Without Docker)
-
-#### Install PostgreSQL 16 with TimescaleDB
+### PostgreSQL 16 with TimescaleDB Installation
 
 1. Download PostgreSQL 16 from [postgresql.org/download/windows](https://www.postgresql.org/download/windows/).
 2. Run the installer with default settings. Remember the password you set for the `postgres` superuser.
@@ -206,6 +157,8 @@ Or copy the project folder to `C:\MDDP` (or any directory of your choice).
 
 ```cmd
 install_deps.bat
+:: Or directly:
+:: deploy\windows\install_deps.bat
 ```
 
 This will:
@@ -245,7 +198,7 @@ Before configuring automatic background operation, verify everything works manua
 ### Start Services
 
 ```cmd
-run.bat
+deploy\windows\run.bat
 ```
 
 **Expected output:**
@@ -288,7 +241,7 @@ logs\plotter.log
 ### Stop Services
 
 ```cmd
-stop.bat
+deploy\windows\stop.bat
 ```
 
 ---
@@ -312,7 +265,7 @@ For continuous unattended operation, we use **Windows Task Scheduler** to:
    ```
 4. Run the setup script:
    ```powershell
-   .\setup_task_scheduler.ps1
+   powershell -ExecutionPolicy Bypass -File .\deploy\windows\setup_task_scheduler.ps1
    ```
 
 **Expected output:**
@@ -367,7 +320,7 @@ The watchdog script (`watchdog.ps1`) runs every 5 minutes and:
 
 Run the watchdog manually to verify it works:
 ```powershell
-powershell -ExecutionPolicy Bypass -File watchdog.ps1
+powershell -ExecutionPolicy Bypass -File .\deploy\windows\watchdog.ps1
 ```
 
 ### View Watchdog Log
@@ -482,7 +435,7 @@ Get-ChildItem -Path "logs" -Filter "*.log" | Where-Object {
 **Solution**:
 ```cmd
 rem Stop all MDDP services
-stop.bat
+deploy\windows\stop.bat
 
 rem Force-kill any remaining processes on MDDP ports
 for /f "tokens=5" %a in ('netstat -aon ^| findstr ":8080.*LISTENING"') do taskkill /f /pid %a
@@ -499,8 +452,7 @@ del .portal.pid .daq.pid .musashi_iv.pid .plotter.pid 2>nul
 **Symptom**: `psycopg2.OperationalError: connection to server failed: Connection timed out`
 
 **Solution**:
-- If using Docker: `docker ps` — verify `daq_tsdb` container is running. If not: `docker compose up -d`
-- If using native PostgreSQL: `sc query postgresql-x64-16` — verify the service is running
+- Verify PostgreSQL service status: `sc query postgresql-x64-16` — verify the service is running
 - Verify the DSN in `USB4716\config.json` points to the correct host/port
 - Test connectivity: `psql -h localhost -U admin -d daq_db`
 
@@ -535,7 +487,7 @@ del .portal.pid .daq.pid .musashi_iv.pid .plotter.pid 2>nul
 3. Run the task manually from an elevated Command Prompt to see error output:
    ```cmd
    cd C:\MDDP
-   run.bat
+   deploy\windows\run.bat
    ```
 
 ### ⚠️ Eventlet/SocketIO Warning
@@ -556,19 +508,13 @@ uv pip install --upgrade eventlet flask-socketio
 Open **PowerShell as Administrator** and run:
 ```powershell
 cd C:\MDDP
-.\remove_task_scheduler.ps1
+powershell -ExecutionPolicy Bypass -File .\deploy\windows\remove_task_scheduler.ps1
 ```
 
 ### Stop All Services
 
 ```cmd
-stop.bat
-```
-
-### Stop Docker Containers (If Using Docker)
-
-```cmd
-docker compose down
+deploy\windows\stop.bat
 ```
 
 ### Remove Firewall Rules (If Created)

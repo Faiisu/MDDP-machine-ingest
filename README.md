@@ -16,8 +16,8 @@ Shows how a user configures and runs the data acquisition and plotting pipeline.
 
 ```mermaid
 graph LR
-    Start([User Starts System]) --> StartDocker[Start TimescaleDB Container]
-    StartDocker --> RunScripts[Run Ingestion Control Suite run.sh]
+    Start([User Starts System]) --> StartDB[Start TimescaleDB Service]
+    StartDB --> RunScripts[Run Ingestion Control Suite run.sh / run.bat]
     RunScripts --> LaunchPortal[Access Portal Gateway :8080]
     
     LaunchPortal --> SelectDAQ[Select DAQ USB-4716 Panel :8081]
@@ -125,7 +125,7 @@ graph LR
 - **Frontend**: Vanilla HTML5, CSS Grid/Flexbox matching the Unified Industrial Cockpit Design Tokens, Javascript (ES6), Socket.io Client, and Plotly.js.
 - **Backend Services**: Python 3, Flask, Flask-SocketIO, Eventlet (for high-concurrency event loops).
 - **Ingestion Pipeline**: Multi-threaded Python pipeline, `psycopg2` bulk inserts, Advantech DAQNavi driver interface.
-- **Database**: TimescaleDB / PostgreSQL (packaged as a Dockerized instance).
+- **Database**: TimescaleDB / PostgreSQL.
 
 ---
 
@@ -135,27 +135,27 @@ The MDDP Ingestion Control Suite supports two deployment paths tailored to targe
 
 | Operating System | Recommended Deployment Method | Primary Setup Commands | Full Guide Link |
 | :--- | :--- | :--- | :--- |
-| **Windows 10/11** | **Native Script-Based Setup** (Batch + Task Scheduler) | `install_deps.bat`<br/>`run.bat`<br/>`powershell .\setup_task_scheduler.ps1` | [DEPLOY_WINDOWS.md](DEPLOY_WINDOWS.md) |
-| **Linux (Ubuntu/Debian)** | **Docker Container-Based Setup** | `docker compose build`<br/>`docker compose up -d` | [DEPLOY_LINUX.md](DEPLOY_LINUX.md) |
+| **Linux (Ubuntu/Debian)** | **Native Script-Based Setup** (`.sh`) | `./deploy/linux/install_deps.sh`<br/>`./deploy/linux/run.sh` | [DEPLOY_LINUX.md](DEPLOY_LINUX.md) |
+| **Windows 10/11** | **Native Script-Based Setup** (`.bat`) | `deploy\windows\install_deps.bat`<br/>`deploy\windows\run.bat`<br/>`powershell .\deploy\windows\setup_task_scheduler.ps1` | [DEPLOY_WINDOWS.md](DEPLOY_WINDOWS.md) |
 
 ---
 
-### Option A: Linux Deployment (Docker-Based)
+### Option A: Linux Deployment (Script-Based)
 
-Deploy all 4 web microservices inside a lightweight Linux container with USB hardware passthrough:
+Deploy all web microservices using native Linux shell scripts:
 
 ```bash
-# Build and launch application container stack
-docker compose up -d --build
+# 1. Install dependencies into virtualenv
+./deploy/linux/install_deps.sh
 
-# Verify container status
-docker compose ps
+# 2. Launch background application services
+./deploy/linux/run.sh
 
-# View application logs
-docker logs -f mddp_app
+# 3. Stop background services
+./deploy/linux/stop.sh
 ```
 
-See [DEPLOY_LINUX.md](DEPLOY_LINUX.md) for full instructions, USB hardware device passthrough rules, and container options.
+See [DEPLOY_LINUX.md](DEPLOY_LINUX.md) for full instructions and hardware connectivity configuration.
 
 ---
 
@@ -165,13 +165,13 @@ For 24/7 unattended Windows operation with native Advantech USB-4716 hardware dr
 
 ```cmd
 :: 1. Install dependencies into virtualenv
-install_deps.bat
+deploy\windows\install_deps.bat
 
 :: 2. Test manual execution
-run.bat
+deploy\windows\run.bat
 
 :: 3. Setup 24/7 background operation in Task Scheduler (Run as Admin in PowerShell)
-powershell -ExecutionPolicy Bypass -File .\setup_task_scheduler.ps1
+powershell -ExecutionPolicy Bypass -File .\deploy\windows\setup_task_scheduler.ps1
 ```
 
 See [DEPLOY_WINDOWS.md](DEPLOY_WINDOWS.md) for complete details on Windows Task Scheduler, automatic crash recovery via `watchdog.ps1`, and firewall rules.
@@ -246,6 +246,9 @@ uv run USB4716/mqtt_to_db.py
 
 ## 6. Project Structure
 
+- `deploy/`: Dedicated platform deployment assets.
+  - `linux/`: Linux shell scripts (`install_deps.sh`, `run.sh`, `stop.sh`), systemd installer (`setup_systemd.sh`), and unit file (`mddp.service`).
+  - `windows/`: Windows batch scripts (`install_deps.bat`, `run.bat`, `stop.bat`), Task Scheduler installers (`setup_task_scheduler.ps1`), and `watchdog.ps1`.
 - `portal/`: Portal Gateway static site files.
   - [index.html](file:///Users/faiisu/projects.nosync/DAQ-USB-4716/portal/index.html): Central gateway cockpit web layout.
   - [app.js](file:///Users/faiisu/projects.nosync/DAQ-USB-4716/portal/app.js): Port heartbeat and uptime trackers.
@@ -265,14 +268,14 @@ uv run USB4716/mqtt_to_db.py
 
 ### ⚠️ Common Issue: Port Conflict
 - **Symptom**: `[SYSTEM] Warning: PID files detected` or failed socket binding warnings during startup.
-- **Solution**: Execute `./stop.sh` to clear dangling processes. If ports remain blocked, check processes listening on ports:
+- **Solution**: Execute `./deploy/linux/stop.sh` to clear dangling processes. If ports remain blocked, check processes listening on ports:
   ```bash
   kill -9 $(lsof -t -i :8080 -i :8081 -i :8084)
   ```
 
 ### ⚠️ Common Issue: TimescaleDB Connection Timeout
 - **Symptom**: Log reports `psycopg2.OperationalError: connection to server at ... failed: Connection timed out`.
-- **Solution**: Make sure Docker is running and verify status via `docker ps`. If connecting to an external server DSN, verify host accessibility via pinging:
+- **Solution**: Make sure TimescaleDB service is running and accessible. If connecting to an external server DSN, verify host accessibility via pinging:
   ```bash
   ping 172.21.108.86
   ```

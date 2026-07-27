@@ -1,18 +1,21 @@
-# MDDP Ingestion Control Suite — Linux Docker Deployment Guide
+# MDDP Ingestion Control Suite — Linux Shell & Systemd Deployment Guide
 
-This document provides step-by-step instructions for deploying the MDDP Ingestion Control Suite on **Linux (Ubuntu/Debian)** using **Docker** and **Docker Compose**, with support for physical **Advantech USB-4716 DAQ** hardware passthrough and serial devices.
+This document provides step-by-step instructions for deploying the MDDP Ingestion Control Suite on **Linux (Ubuntu/Debian)** using native shell scripts (`deploy/linux/install_deps.sh`, `run.sh`, `stop.sh`), with support for physical **Advantech USB-4716 DAQ** hardware, serial devices, **systemd 24/7 autostart**, and **ingestion state persistence across reboots**.
 
 ---
 
 ## Table of Contents
 
 1. [Prerequisites](#1-prerequisites)
-2. [Project Setup](#2-project-setup)
-3. [Docker Deployment](#3-docker-deployment)
-4. [Hardware Layer Connectivity (USB & Serial)](#4-hardware-layer-connectivity-usb--serial)
-5. [Service Access & Verification](#5-service-access--verification)
-6. [Viewing Logs & Diagnostics](#6-viewing-logs--diagnostics)
-7. [Stopping & Restarting Services](#7-stopping--restarting-services)
+2. [Database & Broker Setup](#2-database--broker-setup)
+3. [Project Setup & Dependencies](#3-project-setup--dependencies)
+4. [Service Startup & Management](#4-service-startup--management)
+5. [24/7 Linux Boot Autostart (Systemd)](#5-247-linux-boot-autostart-systemd)
+6. [Ingestion State Persistence Across Reboots](#6-ingestion-state-persistence-across-reboots)
+7. [Hardware Layer Connectivity (USB & Serial)](#7-hardware-layer-connectivity-usb--serial)
+8. [Service Access & Verification](#8-service-access--verification)
+9. [Viewing Logs & Diagnostics](#9-viewing-logs--diagnostics)
+10. [Stopping Services](#10-stopping-services)
 
 ---
 
@@ -20,89 +23,134 @@ This document provides step-by-step instructions for deploying the MDDP Ingestio
 
 Before starting deployment on Linux, ensure the following are installed:
 
-- **Docker Engine** (v20.10 or higher)
-- **Docker Compose** (v2.0 or higher)
+- **Python** (v3.9 or higher)
+- **uv** (Recommended package manager) or standard `python3-venv` + `pip`
+- **Git** (to clone repository)
+- **Advantech DAQNavi SDK for Linux** (for real USB-4716 hardware mode)
 
-Verify installation:
+Verify Python / uv installation:
 ```bash
-docker --version
-docker compose version
+python3 --version
+uv --version  # optional but recommended
 ```
 
 ---
 
-## 2. Project Setup
+## 2. Database & Broker Setup
 
-Clone or copy the project repository to your target Linux directory (e.g., `/opt/mddp` or `~/mddp`):
+The suite requires access to a **TimescaleDB / PostgreSQL** instance and optionally an **MQTT Broker** (e.g. Mosquitto):
 
-```bash
-cd ~/mddp
-```
+1. **TimescaleDB**: Install native `postgresql` + `timescaledb` extension or connect to a remote PostgreSQL server.
+2. **Mosquitto MQTT**: Install via `sudo apt install mosquitto mosquitto-clients` (if using MQTT destination mode).
 
-Ensure `docker-entrypoint.sh` has execution permissions:
-```bash
-chmod +x docker-entrypoint.sh
-```
+Ensure database and tables are created (see `db_setup.sql` or configuration guide).
 
 ---
 
-## 3. Docker Deployment
+## 3. Project Setup & Dependencies
 
-Launch the MDDP application stack using Docker Compose:
+1. Clone or copy the project repository to your target directory:
+   ```bash
+   cd ~/DAQ-USB-4716
+   ```
+
+2. Install project dependencies:
+   ```bash
+   ./deploy/linux/install_deps.sh
+   ```
+
+This will automatically create a virtual environment (`.venv`) and install all required dependencies.
+
+---
+
+## 4. Service Startup & Management
+
+Launch the MDDP application suite in background mode:
 
 ```bash
-docker compose up -d --build
+./deploy/linux/run.sh
 ```
 
 **Expected Output:**
 ```
-[+] Building 2.5s (10/10) FINISHED
-[+] Running 1/1
- ✔ Container mddp_app  Started
+==========================================================
+         MDDP Ingestion Control Suite Startup
+==========================================================
+[SYSTEM] Using Python interpreter: .venv/bin/python
+[SYSTEM] Starting Ingestion Portal on Port 8080 (all interfaces)...
+[SYSTEM] Starting DAQ Control Panel on Port 8081 (all interfaces)...
+[SYSTEM] Starting Musashi IV Control Panel on Port 8083 (all interfaces)...
+[SYSTEM] Starting Database Plotter on Port 8084 (all interfaces)...
+[SYSTEM] Services launched in background.
+[SYSTEM] Accessible locally at http://localhost:8080
+[SYSTEM] Accessible network-wide at http://<HOST_IP>:8080
+==========================================================
 ```
 
 ---
 
-## 4. Hardware Layer Connectivity (USB & Serial)
+## 5. 24/7 Linux Boot Autostart (Systemd)
 
-The Docker setup supports both **Mockup Mode** (driverless simulation) and **Real Hardware Mode** (Advantech USB-4716 DAQ and Serial Dispenser):
+To ensure MDDP services automatically launch when the Linux system boots up or reboots:
+
+1. Run the systemd setup script (requires `sudo` privileges):
+   ```bash
+   ./deploy/linux/setup_systemd.sh
+   ```
+
+2. Manage the service via standard `systemctl` commands:
+   ```bash
+   # Check service status
+   sudo systemctl status mddp
+
+   # Start service manually
+   sudo systemctl start mddp
+
+   # Stop service manually
+   sudo systemctl stop mddp
+
+   # Restart service
+   sudo systemctl restart mddp
+   ```
+
+---
+
+## 6. Ingestion State Persistence Across Reboots
+
+The MDDP suite features **automatic ingestion state recovery**:
+
+- When DAQ or Musashi IV stream ingestion is started via the Web UI (in either `REAL` or `MOCKUP` mode), the desired state is written to a persistent file.
+- When the Linux machine restarts (or power-cycles), the systemd service starts `deploy/linux/run.sh` and boots up the Web GUIs.
+- The Web GUIs check the persistent state and **automatically resume telemetry ingestion** in the exact same mode (`REAL` or `MOCKUP`) as before the reboot!
+
+If ingestion was stopped by the user prior to reboot, it remains in the idle/ready state after boot.
+
+---
+
+## 7. Hardware Layer Connectivity (USB & Serial)
+
+The shell-based deployment supports both **Mockup Mode** (driverless simulation) and **Real Hardware Mode**:
 
 ### A. Mockup Mode (Software Simulation)
-No physical hardware or driver configuration is required. Simply start acquisition from the web UI ([http://localhost:8081](http://localhost:8081)).
+No physical hardware or driver configuration is required. Select Mockup mode from the web UI ([http://localhost:8081](http://localhost:8081)).
 
 ### B. Real USB Hardware Mode (Advantech USB-4716 DAQ)
-The container requires `privileged: true`, mounting `/dev` device nodes, and mounting host Advantech driver shared libraries (`libbiodaq.so`):
-
-```yaml
-  mddp-app:
-    build: .
-    container_name: mddp_app
-    privileged: true
-    volumes:
-      - /dev:/dev
-      - /usr/lib:/host_usr_lib:ro
-      - /usr/local/lib:/host_usr_local_lib:ro
-      - /etc/biobdaq:/etc/biobdaq:ro
-    environment:
-      - LD_LIBRARY_PATH=/host_usr_lib:/host_usr_local_lib:/usr/lib:/usr/local/lib
+Ensure Advantech DAQNavi drivers (`libbiodaq.so`) are installed on your Linux system (`/usr/lib` or `/usr/local/lib`) and user has permissions for `/dev/bdaq*` or USB devices:
+```bash
+sudo usermod -aG dialout,plugdev $USER
 ```
 
-This grants the container direct access to device nodes (`/dev/bus/usb`, `/dev/bdaq*`) and provides the Advantech `libbiodaq.so` shared libraries installed on the Linux host so `Automation.BDaq` can initialize the physical DAQ card.
-
 ### C. Real Serial Port Mode (Musashi IV RS-232 Controller)
-If connecting a physical serial controller (e.g., `/dev/ttyUSB0` or `/dev/ttyACM0`), ensure `/dev` is mounted or explicitly add the device mapping in `docker-compose.yml`:
-
-```yaml
-    devices:
-      - "/dev/ttyUSB0:/dev/ttyUSB0"
-      - "/dev/ttyACM0:/dev/ttyACM0"
+Ensure serial device permissions (`/dev/ttyUSB0` or `/dev/ttyACM0`):
+```bash
+sudo chmod 666 /dev/ttyUSB0
 ```
 
 ---
 
-## 5. Service Access & Verification
+## 8. Service Access & Verification
 
-Once deployed, access the web microservices via your browser:
+Once launched, access the web microservices via your browser:
 
 | Service | Port | URL |
 | :--- | :--- | :--- |
@@ -111,35 +159,26 @@ Once deployed, access the web microservices via your browser:
 | **Musashi IV Panel** | `8083` | [http://localhost:8083](http://localhost:8083) |
 | **Database Plotter** | `8084` | [http://localhost:8084](http://localhost:8084) |
 
-To verify active listening ports on the host:
+Verify active listening ports:
 ```bash
 lsof -i :8080 -i :8081 -i :8083 -i :8084
 ```
 
 ---
 
-## 6. Viewing Logs & Diagnostics
+## 9. Viewing Logs & Diagnostics
 
-To view aggregated real-time container output:
+Service processes write background logs or output to stdout/stderr. To monitor individual process log files:
 ```bash
-docker logs -f mddp_app
-```
-
-To view individual service logs generated inside the container:
-```bash
-docker exec -it mddp_app tail -f /app/logs/daq_panel.log
-docker exec -it mddp_app tail -f /app/logs/plotter.log
+tail -f USB4716/daq_pipeline.log
 ```
 
 ---
 
-## 7. Stopping & Restarting Services
+## 10. Stopping Services
 
-- **Stop Services**:
-  ```bash
-  docker compose down
-  ```
-- **Restart Services**:
-  ```bash
-  docker compose restart
-  ```
+To safely terminate all running background services:
+
+```bash
+./deploy/linux/stop.sh
+```

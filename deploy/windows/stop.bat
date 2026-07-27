@@ -2,6 +2,8 @@
 rem See: docs/architecture/context.md
 rem English comments only
 
+cd /d "%~dp0..\.."
+
 set "PORTAL_PID_FILE=.portal.pid"
 set "DAQ_PID_FILE=.daq.pid"
 set "MUSASHI_IV_PID_FILE=.musashi_iv.pid"

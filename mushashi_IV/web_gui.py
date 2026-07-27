@@ -26,6 +26,7 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.json')
 PID_PATH = os.path.join(os.path.dirname(__file__), '.musashi_process.pid')
+DESIRED_STATE_PATH = os.path.join(os.path.dirname(__file__), '.musashi_desired_state.json')
 LOG_PATH = os.path.join(os.path.dirname(__file__), 'musashi_iv_pipeline.log')
 
 tail_thread = None
@@ -59,6 +60,22 @@ def write_config(config_data):
     except Exception as e:
         print(f"Error writing config.json: {e}")
         return False
+
+def read_desired_state():
+    try:
+        if os.path.exists(DESIRED_STATE_PATH):
+            with open(DESIRED_STATE_PATH, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"Error reading desired state: {e}")
+    return {"is_running": False}
+
+def write_desired_state(is_running):
+    try:
+        with open(DESIRED_STATE_PATH, 'w') as f:
+            json.dump({"is_running": is_running}, f, indent=2)
+    except Exception as e:
+        print(f"Error writing desired state: {e}")
 
 def is_pid_running(pid):
     if sys.platform == "win32":
@@ -228,6 +245,7 @@ def start_process():
     
     try:
         proc = subprocess.Popen([sys.executable, script_path], stdout=log_file, stderr=subprocess.STDOUT)
+        write_desired_state(True)
         with open(PID_PATH, 'w') as f:
             f.write(str(proc.pid))
             
@@ -248,6 +266,7 @@ def stop_process():
     if pid is None:
         return jsonify({'success': False, 'message': 'No running process detected'}), 400
 
+    write_desired_state(False)
     terminate_pid(pid)
     if os.path.exists(PID_PATH):
         try: os.remove(PID_PATH)
@@ -273,4 +292,13 @@ if __name__ == '__main__':
     print("==========================================================")
     print("      Musashi IV Robot Dispenser Web GUI (Port 8083)")
     print("==========================================================")
+    pid = get_running_process()
+    if pid is not None:
+        print(f"[SYSTEM] Detected active Musashi IV background process (PID: {pid}).")
+    else:
+        desired_state = read_desired_state()
+        if desired_state.get('is_running', False):
+            print("[SYSTEM] Device restart detected! Auto-resuming Musashi IV ingestion stream...")
+            with app.test_request_context():
+                start_process()
     socketio.run(app, host='0.0.0.0', port=8083, debug=False)

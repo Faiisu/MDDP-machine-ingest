@@ -2,6 +2,12 @@
 # See: docs/architecture/context.md
 # English comments only
 
+# Resolve project root directory regardless of invocation location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+cd "$PROJECT_ROOT" || exit 1
+
 echo "=========================================================="
 echo "         MDDP Ingestion Suite - Installing Dependencies"
 echo "=========================================================="
@@ -68,7 +74,7 @@ fi
 if [ $? -eq 0 ]; then
     echo "=========================================================="
     echo "[SUCCESS] All dependencies installed successfully."
-    echo "[SYSTEM] To start the background services, run: ./run.sh"
+    echo "[SYSTEM] To start the background services, run: ./deploy/linux/run.sh"
     echo "=========================================================="
 else
     echo "=========================================================="

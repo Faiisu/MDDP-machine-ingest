@@ -3,6 +3,8 @@ setlocal EnableDelayedExpansion
 rem See: docs/architecture/context.md
 rem English comments only
 
+cd /d "%~dp0..\.."
+
 echo ==========================================================
 echo          MDDP Ingestion Suite - Installing Dependencies
 echo ==========================================================
@@ -97,7 +99,7 @@ if defined UV_CMD (
 if %errorlevel% equ 0 (
     echo ==========================================================
     echo [SUCCESS] All dependencies installed successfully.
-    echo [SYSTEM] To start the background services, run: run.bat
+    echo [SYSTEM] To start the background services, run: deploy\windows\run.bat
     echo ==========================================================
 ) else (
     echo ==========================================================

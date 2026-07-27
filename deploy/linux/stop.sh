@@ -2,6 +2,12 @@
 # See: docs/architecture/context.md
 # English comments only
 
+# Resolve project root directory regardless of invocation location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+cd "$PROJECT_ROOT" || exit 1
+
 PORTAL_PID_FILE=".portal.pid"
 DAQ_PID_FILE=".daq.pid"
 MUSASHI_IV_PID_FILE=".musashi_iv.pid"
