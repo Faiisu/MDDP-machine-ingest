@@ -6,12 +6,14 @@ cd /d "%~dp0..\.."
 
 set "PORTAL_PID_FILE=.portal.pid"
 set "DAQ_PID_FILE=.daq.pid"
+set "MUSASHI_II_PID_FILE=.musashi_ii.pid"
 set "MUSASHI_IV_PID_FILE=.musashi_iv.pid"
 set "PLOTTER_PID_FILE=.plotter.pid"
 
 rem Safeguard check to prevent starting duplicate instances
 if exist "%PORTAL_PID_FILE%" goto :already_running
 if exist "%DAQ_PID_FILE%" goto :already_running
+if exist "%MUSASHI_II_PID_FILE%" goto :already_running
 if exist "%MUSASHI_IV_PID_FILE%" goto :already_running
 if exist "%PLOTTER_PID_FILE%" goto :already_running
 goto :start_services
@@ -62,12 +64,17 @@ echo [SYSTEM] Starting DAQ Control Panel on Port 8081 (all interfaces)...
 start "MDDP_DAQ_PANEL" /min cmd /c "title MDDP_DAQ_PANEL && %PYTHON_BIN% USB4716\web_gui.py >> logs\daq_panel.log 2>&1"
 echo 1 > "%DAQ_PID_FILE%"
 
-rem 3. Start Musashi IV Control Panel (Port 8083)
+rem 3. Start Musashi II Control Panel (Port 8082)
+echo [SYSTEM] Starting Musashi II Control Panel on Port 8082 (all interfaces)...
+start "MDDP_MUSASHI_II_PANEL" /min cmd /c "title MDDP_MUSASHI_II_PANEL && %PYTHON_BIN% musashi_II\web_gui.py >> logs\musashi_ii_panel.log 2>&1"
+echo 1 > "%MUSASHI_II_PID_FILE%"
+
+rem 4. Start Musashi IV Control Panel (Port 8083)
 echo [SYSTEM] Starting Musashi IV Control Panel on Port 8083 (all interfaces)...
 start "MDDP_MUSASHI_IV_PANEL" /min cmd /c "title MDDP_MUSASHI_IV_PANEL && %PYTHON_BIN% mushashi_IV\web_gui.py >> logs\musashi_iv_panel.log 2>&1"
 echo 1 > "%MUSASHI_IV_PID_FILE%"
 
-rem 4. Start Database Plotter (Port 8084)
+rem 5. Start Database Plotter (Port 8084)
 echo [SYSTEM] Starting Database Plotter on Port 8084 (all interfaces)...
 start "MDDP_PLOTTER_SERVICE" /min cmd /c "title MDDP_PLOTTER_SERVICE && %PYTHON_BIN% plot_service\app.py >> logs\plotter.log 2>&1"
 echo 1 > "%PLOTTER_PID_FILE%"

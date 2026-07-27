@@ -436,8 +436,11 @@ def run_ingestion_loop(config_path="config.json", max_iterations=None, override_
                 
                 print(f"  -> Success! Stored record #{row_id} in database.")
                 print(f"     Pressure: {data['pressure_kpa']} kPa | Time: {data['time_ms']} ms | Vacuum: {data['vacuum_kpa']} kPa | Mode: {data['mode_name']} | Product: '{data['product_name']}'")
+                print(f"[STATS] polled={iteration} | written={iteration} | db_errors=0 | pressure_kpa={data['pressure_kpa']} | time_ms={data['time_ms']} | vacuum_kpa={data['vacuum_kpa']} | mode={data['mode_name']} | product={data['product_name']}")
+                sys.stdout.flush()
             except Exception as err:
                 logger.error(f"Error acquiring or saving data: {err}")
+                sys.stdout.flush()
                 if not mock_mode and "Handshake failed" in str(err):
                     logger.warning(
                         f"[HINT] No response received from serial port '{port}'.\n"

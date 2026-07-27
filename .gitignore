@@ -3,10 +3,17 @@ __pycache__/
 .DS_Store
 .portal.pid
 .daq.pid
+.musashi_ii.pid
+.musashi_iv.pid
 .plotter.pid
 USB4716/.daq_process.pid
 USB4716/.daq_process.mode
 USB4716/daq_pipeline.log
+musashi_II/.musashi_ii_process.pid
+musashi_II/.musashi_ii_process.mode
+musashi_II/.musashi_ii_desired_state.json
+musashi_II/musashi_ii_pipeline.log
+*.db
 venv/
 .venv/
 .uv/
