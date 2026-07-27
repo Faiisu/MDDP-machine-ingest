@@ -202,13 +202,13 @@ function Stop-Service-Now {
 
     # Also kill the Python process if PID file exists
     if (Test-Path $PidFile) {
-        $pid = Get-Content $PidFile -ErrorAction SilentlyContinue
-        if ($pid) {
+        $procId = Get-Content $PidFile -ErrorAction SilentlyContinue
+        if ($procId) {
             try {
-                $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+                $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
                 if ($proc) {
-                    Stop-Process -Id $pid -Force
-                    Write-Status "OK" "Python process (PID: $pid) terminated."
+                    Stop-Process -Id $procId -Force
+                    Write-Status "OK" "Python process (PID: $procId) terminated."
                 }
             } catch {
                 Write-Status "INFO" "Process already stopped."
@@ -262,10 +262,10 @@ function Get-ServiceStatus {
 
     # Show PID if running
     if ((Test-Path $PidFile)) {
-        $pid = Get-Content $PidFile -ErrorAction SilentlyContinue
-        $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+        $procId = Get-Content $PidFile -ErrorAction SilentlyContinue
+        $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
         if ($proc) {
-            Write-Host "  PID:          " -NoNewline; Write-Host $pid -ForegroundColor Green
+            Write-Host "  PID:          " -NoNewline; Write-Host $procId -ForegroundColor Green
             Write-Host "  Memory:       $([math]::Round($proc.WorkingSet64 / 1MB, 1)) MB"
             Write-Host "  CPU Time:     $($proc.TotalProcessorTime.ToString('hh\:mm\:ss'))"
         }

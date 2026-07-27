@@ -1,24 +1,43 @@
 services:
-  timescaledb:
-    image: timescale/timescaledb:latest-pg16
-    container_name: daq_tsdb
+  mddp-app:
+    build: .
+    container_name: mddp_app
     restart: unless-stopped
-    environment:
-      POSTGRES_USER:     admin
-      POSTGRES_PASSWORD: admin
-      POSTGRES_DB:       daq_db
-    ports:
-      - "5432:5432"
+    # Privileged mode & USB device mapping for physical Advantech USB-4716 DAQ hardware (Linux Host)
+    privileged: true
     volumes:
-      - ./pgdata:/var/lib/postgresql/data
-      - ./db_setup.sql:/docker-entrypoint-initdb.d/init.sql
-
-  mosquitto:
-    image: eclipse-mosquitto:latest
-    container_name: daq_mqtt
-    restart: unless-stopped
+      - /dev/bus/usb:/dev/bus/usb
+    # Device mapping for physical RS-232 / USB serial dispenser controllers (Uncomment if needed)
+    # devices:
+    #   - "/dev/ttyUSB0:/dev/ttyUSB0"
     ports:
-      - "1883:1883"
-      - "9001:9001"
-    command: sh -c 'echo "listener 1883\nallow_anonymous true" > /mosquitto/config/mosquitto.conf && /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf'
+      - "8080:8080" # Portal Gateway
+      - "8081:8081" # DAQ Control Panel
+      - "8083:8083" # Musashi IV Panel
+      - "8084:8084" # Database Plotter Service
 
+  # Optional Test Plugins (TimescaleDB & Mosquitto MQTT Broker)
+  # Uncomment the services below if running local database / broker containers
+  #
+  # timescaledb:
+  #   image: timescale/timescaledb:latest-pg16
+  #   container_name: daq_tsdb
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: admin
+  #     POSTGRES_PASSWORD: admin
+  #     POSTGRES_DB: daq_db
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - ./pgdata:/var/lib/postgresql/data
+  #     - ./db_setup.sql:/docker-entrypoint-initdb.d/init.sql
+  #
+  # mosquitto:
+  #   image: eclipse-mosquitto:latest
+  #   container_name: daq_mqtt
+  #   restart: unless-stopped
+  #   ports:
+  #     - "1883:1883"
+  #     - "9001:9001"
+  #   command: sh -c 'echo "listener 1883\nallow_anonymous true" > /mosquitto/config/mosquitto.conf && /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf'

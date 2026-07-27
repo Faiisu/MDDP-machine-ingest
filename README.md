@@ -129,87 +129,52 @@ graph LR
 
 ---
 
-## 3. Quick Start (Step-by-Step)
+## 3. Quick Start & Deployment Options
 
-### Prerequisites
-Before launching the control suite, ensure you have the following installed:
-- ✅ **Python** (v3.9 or higher)
-- ✅ **Docker** and **Docker Compose**
-- ✅ **Advantech DAQNavi SDK** (only required if running in `Real Hardware` mode; mockup mode runs driver-free)
+The MDDP Ingestion Control Suite supports two deployment paths tailored to target operating systems and environment needs:
 
-### Step 1: Initialize Database Container
-Launch the TimescaleDB database instance using Docker Compose:
+| Operating System | Recommended Deployment Method | Primary Setup Commands | Full Guide Link |
+| :--- | :--- | :--- | :--- |
+| **Windows 10/11** | **Native Script-Based Setup** (Batch + Task Scheduler) | `install_deps.bat`<br/>`run.bat`<br/>`powershell .\setup_task_scheduler.ps1` | [DEPLOY_WINDOWS.md](DEPLOY_WINDOWS.md) |
+| **Linux (Ubuntu/Debian)** | **Docker Container-Based Setup** | `docker compose build`<br/>`docker compose up -d` | [DEPLOY_LINUX.md](DEPLOY_LINUX.md) |
 
-```bash
-docker compose up -d
-```
+---
 
-**Expected Output**:
-```
-[+] Running 2/2
- ✔ Network daq-usb-4716_default  Created
- ✔ Container daq_tsdb            Started
-```
+### Option A: Linux Deployment (Docker-Based)
 
-### Step 2: Install Dependencies
-Run the install script to bootstrap the virtual environment and install dependencies:
+Deploy all 4 web microservices inside a lightweight Linux container with USB hardware passthrough:
 
 ```bash
-chmod +x install_deps.sh
-./install_deps.sh
+# Build and launch application container stack
+docker compose up -d --build
+
+# Verify container status
+docker compose ps
+
+# View application logs
+docker logs -f mddp_app
 ```
 
-> 💡 **Tip**: This script creates a localized Python virtual environment (`venv`) and automatically upgrades `pip` before installing required packages from `requirements.txt`.
+See [DEPLOY_LINUX.md](DEPLOY_LINUX.md) for full instructions, USB hardware device passthrough rules, and container options.
 
-### Step 3: Run Ingestion Control Suite
-Start the Portal Gateway, DAQ Control Panel, and Database Plotter backend services:
+---
 
-```bash
-chmod +x run.sh
-./run.sh
+### Option B: Windows Deployment (Script-Based)
+
+For 24/7 unattended Windows operation with native Advantech USB-4716 hardware drivers:
+
+```cmd
+:: 1. Install dependencies into virtualenv
+install_deps.bat
+
+:: 2. Test manual execution
+run.bat
+
+:: 3. Setup 24/7 background operation in Task Scheduler (Run as Admin in PowerShell)
+powershell -ExecutionPolicy Bypass -File .\setup_task_scheduler.ps1
 ```
 
-**Expected Output**:
-```
-[SYSTEM] Using Python interpreter: venv/bin/python
-==========================================================
-         MDDP Ingestion Control Suite Startup
-==========================================================
-[SYSTEM] Starting Ingestion Portal on Port 8080 (all interfaces)...
-[SYSTEM] Starting DAQ Control Panel on Port 8081 (all interfaces)...
-[SYSTEM] Starting Database Plotter on Port 8084 (all interfaces)...
-[SYSTEM] Services launched in background.
-[SYSTEM] Accessible locally at http://localhost:8080
-[SYSTEM] Accessible network-wide at http://<HOST_IP>:8080
-==========================================================
-```
-
-### Step 4: Verify Service Status
-To verify the services are running and listening on the designated ports:
-
-```bash
-# On macOS/Linux:
-lsof -i :8080 -i :8081 -i :8084
-```
-
-### Step 5: Start Data Ingestion
-1. Open your browser and navigate to the Portal Gateway at [http://localhost:8080](http://localhost:8080).
-2. Click **LAUNCH PANEL** on the **DAQ USB-4716** row to open the Control Panel at [http://localhost:8081](http://localhost:8081).
-3. Select **MOCKUP** (or **REAL** if the hardware and drivers are connected) and click the green **START ACQUISITION** button.
-4. You should see telemetry statistics updating and stdout logs streaming to the terminal console window.
-
-### Step 6: Plot Interactive Telemetry
-1. Return to the Portal Gateway or go directly to [http://localhost:8084](http://localhost:8084).
-2. Select the channel matching your active configuration (e.g. Channel `0`) and click **Add Plot**.
-3. Panning, zooming, and tracking options are available via the Plotly toolbar overlay.
-
-### Step 7: Shutdown Services
-To clean up and shut down background processes, run the stop script:
-
-```bash
-chmod +x stop.sh
-./stop.sh
-```
+See [DEPLOY_WINDOWS.md](DEPLOY_WINDOWS.md) for complete details on Windows Task Scheduler, automatic crash recovery via `watchdog.ps1`, and firewall rules.
 
 ---
 
