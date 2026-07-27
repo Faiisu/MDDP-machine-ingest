@@ -71,7 +71,7 @@ The Docker setup supports both **Mockup Mode** (driverless simulation) and **Rea
 No physical hardware or driver configuration is required. Simply start acquisition from the web UI ([http://localhost:8081](http://localhost:8081)).
 
 ### B. Real USB Hardware Mode (Advantech USB-4716 DAQ)
-The container is configured with `privileged: true` and mounts `/dev/bus/usb:/dev/bus/usb` in `docker-compose.yml`:
+The container requires `privileged: true`, mounting `/dev` device nodes, and mounting host Advantech driver shared libraries (`libbiodaq.so`):
 
 ```yaml
   mddp-app:
@@ -79,17 +79,23 @@ The container is configured with `privileged: true` and mounts `/dev/bus/usb:/de
     container_name: mddp_app
     privileged: true
     volumes:
-      - /dev/bus/usb:/dev/bus/usb
+      - /dev:/dev
+      - /usr/lib:/host_usr_lib:ro
+      - /usr/local/lib:/host_usr_local_lib:ro
+      - /etc/biobdaq:/etc/biobdaq:ro
+    environment:
+      - LD_LIBRARY_PATH=/host_usr_lib:/host_usr_local_lib:/usr/lib:/usr/local/lib
 ```
 
-This grants the container direct access to the host's USB controller for low-latency telemetry acquisition.
+This grants the container direct access to device nodes (`/dev/bus/usb`, `/dev/bdaq*`) and provides the Advantech `libbiodaq.so` shared libraries installed on the Linux host so `Automation.BDaq` can initialize the physical DAQ card.
 
 ### C. Real Serial Port Mode (Musashi IV RS-232 Controller)
-If connecting a physical serial controller (e.g., `/dev/ttyUSB0` or `/dev/ttyS0`), uncomment the device mapping in `docker-compose.yml`:
+If connecting a physical serial controller (e.g., `/dev/ttyUSB0` or `/dev/ttyACM0`), ensure `/dev` is mounted or explicitly add the device mapping in `docker-compose.yml`:
 
 ```yaml
     devices:
       - "/dev/ttyUSB0:/dev/ttyUSB0"
+      - "/dev/ttyACM0:/dev/ttyACM0"
 ```
 
 ---

@@ -3,13 +3,19 @@ services:
     build: .
     container_name: mddp_app
     restart: unless-stopped
-    # Privileged mode & USB device mapping for physical Advantech USB-4716 DAQ hardware (Linux Host)
+    # Privileged mode, host device tree & Advantech driver shared libraries (Linux Host)
     privileged: true
     volumes:
-      - /dev/bus/usb:/dev/bus/usb
-    # Device mapping for physical RS-232 / USB serial dispenser controllers (Uncomment if needed)
+      - /dev:/dev
+      - /usr/lib:/host_usr_lib:ro
+      - /usr/local/lib:/host_usr_local_lib:ro
+      - /etc/biobdaq:/etc/biobdaq:ro
+    environment:
+      - LD_LIBRARY_PATH=/host_usr_lib:/host_usr_local_lib:/usr/lib:/usr/local/lib
+    # Device mapping for physical RS-232 / USB serial dispenser controllers (e.g. Musashi)
     # devices:
     #   - "/dev/ttyUSB0:/dev/ttyUSB0"
+    #   - "/dev/ttyACM0:/dev/ttyACM0"
     ports:
       - "8080:8080" # Portal Gateway
       - "8081:8081" # DAQ Control Panel
