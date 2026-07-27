@@ -33,7 +33,12 @@ if exist ".venv" (
     echo [OK] Virtual environment already exists.
 ) else (
     echo [>>] Creating virtual environment...
-    python -m venv .venv
+    where uv >nul 2>&1
+    if errorlevel 0 (
+        uv venv .venv
+    ) else (
+        python -m venv .venv
+    )
     if errorlevel 1 (
         echo [ERROR] Failed to create virtual environment.
         pause
@@ -48,15 +53,18 @@ call .venv\Scripts\activate.bat
 echo [OK] Virtual environment activated.
 echo.
 
-REM --- Upgrade pip ---
-echo [>>] Upgrading pip...
-python -m pip install --upgrade pip >nul 2>&1
-echo [OK] pip upgraded.
-echo.
-
 REM --- Install dependencies ---
-echo [>>] Installing dependencies from requirements.txt...
-pip install -r requirements.txt
+echo [>>] Installing dependencies...
+where uv >nul 2>&1
+if errorlevel 0 (
+    echo [OK] Using uv package manager.
+    uv pip install -r requirements.txt
+) else (
+    echo [>>] Upgrading pip...
+    python -m pip install --upgrade pip >nul 2>&1
+    echo [OK] pip upgraded.
+    pip install -r requirements.txt
+)
 if errorlevel 1 (
     echo [ERROR] Failed to install dependencies.
     pause

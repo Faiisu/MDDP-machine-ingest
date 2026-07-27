@@ -22,7 +22,9 @@ exit /b 1
 :start_services
 rem Resolve Python binary dynamically (prefer virtualenv python over global python)
 set "PYTHON_BIN="
-if exist "venv\Scripts\python.exe" (
+if exist ".venv\Scripts\python.exe" (
+    set "PYTHON_BIN=.venv\Scripts\python.exe"
+) else if exist "venv\Scripts\python.exe" (
     set "PYTHON_BIN=venv\Scripts\python.exe"
 ) else (
     where python >nul 2>nul

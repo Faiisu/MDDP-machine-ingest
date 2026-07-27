@@ -209,16 +209,15 @@ install_deps.bat
 ```
 
 This will:
-1. Detect your Python installation
-2. Create a virtual environment (`venv\`)
-3. Install all packages from `requirements.txt`
+1. Detect your `uv` or Python installation
+2. Create a virtual environment (`.venv\`)
+3. Install and sync all dependencies from `pyproject.toml` / `requirements.txt` using `uv`
 
 **Expected output:**
 ```
-[SYSTEM] Detected Python executable: python (Python 3.11.x)
-[SYSTEM] Creating Python virtual environment in .\venv...
-[SYSTEM] Upgrading pip...
-[SYSTEM] Installing dependencies from requirements.txt...
+[SYSTEM] Detected uv package manager: uv 0.7.x
+[SYSTEM] Creating Python virtual environment using uv in .\.venv...
+[SYSTEM] Syncing dependencies using uv...
 [SUCCESS] All dependencies installed successfully.
 ```
 
@@ -524,7 +523,7 @@ del .portal.pid .daq.pid .musashi_iv.pid .plotter.pid 2>nul
 1. Open **Advantech Navigator** and verify USB-4716 appears in the device list
 2. Check `DEVICE_DESCRIPTION` in `USB4716\config.json` matches exactly (e.g., `USB-4716,BID#0`)
 3. Try resetting the USB connection (unplug/replug the USB cable)
-4. Verify the DAQNavi Python package is installed: `pip show advantech-AutomationBDaq`
+4. Verify the DAQNavi Python package is installed: `uv pip show advantech-AutomationBDaq`
 
 ### ⚠️ Task Scheduler Task Fails to Start
 
@@ -545,7 +544,7 @@ del .portal.pid .daq.pid .musashi_iv.pid .plotter.pid 2>nul
 
 **Solution**: This is usually non-fatal. If WebSocket features are broken:
 ```cmd
-venv\Scripts\pip install --upgrade eventlet flask-socketio
+uv pip install --upgrade eventlet flask-socketio
 ```
 
 ---

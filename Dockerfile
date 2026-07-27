@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -15,10 +15,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip, setuptools, and wheel to guarantee binary wheel installation
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir --prefer-binary -r requirements.txt
+# Install uv for fast, reliable dependency management
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Install dependencies using uv into global container environment
+COPY pyproject.toml requirements.txt uv.lock ./
+RUN uv pip install --system -r requirements.txt
 
 # Copy codebase and set permissions
 COPY . .

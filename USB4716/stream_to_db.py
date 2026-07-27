@@ -326,7 +326,7 @@ class MQTTClient:
         try:
             import paho.mqtt.client as mqtt
         except ImportError:
-            log.error("paho-mqtt package is not installed. Run 'pip install paho-mqtt' to enable MQTT mode.")
+            log.error("paho-mqtt package is not installed. Run 'uv pip install paho-mqtt' to enable MQTT mode.")
             return False
 
         while not self.stop_event.is_set():

@@ -8,4 +8,6 @@ USB4716/.daq_process.pid
 USB4716/.daq_process.mode
 USB4716/daq_pipeline.log
 venv/
+.venv/
+.uv/
 pgdata/

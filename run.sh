@@ -16,11 +16,17 @@ fi
 
 # Resolve Python binary dynamically (prefer virtualenv python over global python)
 PYTHON_BIN=""
-if [ -f "venv/bin/python" ]; then
-    # Unix virtualenv python path
+if [ -f ".venv/bin/python" ]; then
+    # Unix .venv python path (uv standard)
+    PYTHON_BIN=".venv/bin/python"
+elif [ -f "venv/bin/python" ]; then
+    # Unix venv python path
     PYTHON_BIN="venv/bin/python"
+elif [ -f ".venv/Scripts/python" ]; then
+    # Windows Git Bash .venv python path
+    PYTHON_BIN=".venv/Scripts/python"
 elif [ -f "venv/Scripts/python" ]; then
-    # Windows Git Bash virtualenv python path
+    # Windows Git Bash venv python path
     PYTHON_BIN="venv/Scripts/python"
 elif command -v python3 >/dev/null 2>&1; then
     PYTHON_BIN="python3"

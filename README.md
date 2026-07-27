@@ -239,7 +239,7 @@ When `DESTINATION` is set to `mqtt`, the DAQ streaming pipeline publishes JSON t
 ### Standalone MQTT-to-DB Subscriber
 To consume telemetry from the MQTT broker and persist it into TimescaleDB:
 ```bash
-venv/bin/python USB4716/mqtt_to_db.py
+uv run USB4716/mqtt_to_db.py
 ```
 
 ---

@@ -6,49 +6,64 @@ echo "=========================================================="
 echo "         MDDP Ingestion Suite - Installing Dependencies"
 echo "=========================================================="
 
-# 1. Detect Python executable
-PYTHON_CMD=""
-if command -v python3 >/dev/null 2>&1; then
-    PYTHON_CMD="python3"
-elif command -v python >/dev/null 2>&1; then
-    PYTHON_CMD="python"
+# 1. Detect uv or fallback to Python
+UV_CMD=""
+if command -v uv >/dev/null 2>&1; then
+    UV_CMD="uv"
+    echo "[SYSTEM] Detected uv package manager: $($UV_CMD --version)"
 else
-    echo "[ERROR] Python was not found on this system. Please install Python first."
-    exit 1
-fi
-
-echo "[SYSTEM] Detected Python executable: $PYTHON_CMD ($($PYTHON_CMD --version 2>&1))"
-
-# 2. Set up virtual environment
-VENV_DIR="venv"
-if [ ! -d "$VENV_DIR" ]; then
-    echo "[SYSTEM] Creating Python virtual environment in ./${VENV_DIR}..."
-    $PYTHON_CMD -m venv $VENV_DIR
-    if [ $? -ne 0 ]; then
-        echo "[ERROR] Failed to create virtual environment."
+    echo "[SYSTEM] 'uv' not found in PATH. Checking Python fallback..."
+    PYTHON_CMD=""
+    if command -v python3 >/dev/null 2>&1; then
+        PYTHON_CMD="python3"
+    elif command -v python >/dev/null 2>&1; then
+        PYTHON_CMD="python"
+    else
+        echo "[ERROR] Neither 'uv' nor Python was found on this system."
+        echo "[ERROR] Please install uv (https://docs.astral.sh/uv/) or Python 3.12+."
         exit 1
     fi
-    echo "[SYSTEM] Virtual environment created."
-else
-    echo "[SYSTEM] Existing virtual environment found in ./${VENV_DIR}."
+    echo "[SYSTEM] Detected Python executable: $PYTHON_CMD ($($PYTHON_CMD --version 2>&1))"
 fi
 
-# 3. Activate Virtual Environment dynamically based on OS/shell
-echo "[SYSTEM] Activating virtual environment..."
-if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
-    # Windows Git Bash shell
-    source "$VENV_DIR/Scripts/activate"
+# 2. Set up virtual environment and install dependencies
+VENV_DIR=".venv"
+if [ -n "$UV_CMD" ]; then
+    echo "[SYSTEM] Creating Python virtual environment using uv in ./${VENV_DIR}..."
+    $UV_CMD venv $VENV_DIR
+    if [ $? -ne 0 ]; then
+        echo "[ERROR] Failed to create virtual environment with uv."
+        exit 1
+    fi
+    echo "[SYSTEM] Syncing dependencies using uv..."
+    if [ -f "pyproject.toml" ]; then
+        $UV_CMD sync
+    else
+        $UV_CMD pip install -r requirements.txt
+    fi
 else
-    # Linux / macOS shell
-    source "$VENV_DIR/bin/activate"
+    if [ ! -d "$VENV_DIR" ] && [ ! -d "venv" ]; then
+        echo "[SYSTEM] Creating Python virtual environment in ./${VENV_DIR}..."
+        $PYTHON_CMD -m venv $VENV_DIR
+        if [ $? -ne 0 ]; then
+            echo "[ERROR] Failed to create virtual environment."
+            exit 1
+        fi
+    fi
+    ACT_PATH=""
+    if [ -d "$VENV_DIR" ]; then
+        ACT_PATH="$VENV_DIR"
+    else
+        ACT_PATH="venv"
+    fi
+    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+        source "$ACT_PATH/Scripts/activate"
+    else
+        source "$ACT_PATH/bin/activate"
+    fi
+    echo "[SYSTEM] Installing dependencies using pip fallback..."
+    python -m pip install -r requirements.txt
 fi
-
-# 4. Upgrade pip and install packages
-echo "[SYSTEM] Upgrading pip..."
-python -m pip install --upgrade pip
-
-echo "[SYSTEM] Installing dependencies from requirements.txt..."
-python -m pip install -r requirements.txt
 
 if [ $? -eq 0 ]; then
     echo "=========================================================="

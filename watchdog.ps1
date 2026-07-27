@@ -14,7 +14,9 @@ function Log-Message {
 
 # Python Resolution
 $pythonBin = "python"
-if (Test-Path (Join-Path $projectDir "venv\Scripts\python.exe")) {
+if (Test-Path (Join-Path $projectDir ".venv\Scripts\python.exe")) {
+    $pythonBin = Join-Path $projectDir ".venv\Scripts\python.exe"
+} elseif (Test-Path (Join-Path $projectDir "venv\Scripts\python.exe")) {
     $pythonBin = Join-Path $projectDir "venv\Scripts\python.exe"
 }
 
