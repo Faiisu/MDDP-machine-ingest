@@ -739,3 +739,175 @@ body::before {
         justify-content: space-between;
     }
 }
+
+/* USB / DAQ Scanner UI */
+.scan-input-group {
+    display: flex;
+    gap: 0.5rem;
+    position: relative;
+}
+
+.scan-input-group input {
+    flex: 1;
+}
+
+.btn-scan-usb {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.55rem 0.85rem;
+    background-color: rgba(0, 242, 254, 0.08);
+    border: 1px solid var(--accent-cyan);
+    color: var(--accent-cyan);
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+}
+
+.btn-scan-usb:hover {
+    background-color: var(--accent-cyan);
+    color: var(--bg-main);
+    box-shadow: 0 0 12px rgba(0, 242, 254, 0.4);
+}
+
+.btn-scan-usb.scanning .scan-icon {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.scanned-devices-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 0.35rem;
+    background-color: #0b0f19;
+    border: 1px solid var(--accent-cyan);
+    border-radius: 6px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 242, 254, 0.15);
+    z-index: 500;
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.scanned-devices-menu.hidden {
+    display: none;
+}
+
+.scan-menu-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.8rem;
+    background-color: rgba(0, 242, 254, 0.08);
+    border-bottom: 1px solid var(--border-light);
+    font-size: 0.65rem;
+    font-weight: 800;
+    color: var(--accent-cyan);
+    letter-spacing: 0.08em;
+}
+
+.close-scan-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 0 0.2rem;
+}
+
+.close-scan-btn:hover {
+    color: var(--text-primary);
+}
+
+.scan-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.65rem 0.8rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.scan-item:last-child {
+    border-bottom: none;
+}
+
+.scan-item:hover {
+    background-color: rgba(0, 242, 254, 0.12);
+}
+
+.scan-item-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.scan-item-name {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.scan-item-id {
+    font-size: 0.68rem;
+    color: var(--accent-cyan);
+}
+
+.scan-item-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.2rem;
+}
+
+.badge {
+    padding: 0.15rem 0.45rem;
+    border-radius: 3px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.badge-daq {
+    background-color: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.badge-serial {
+    background-color: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.scan-loading, .scan-empty, .scan-error {
+    padding: 1rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.scan-error {
+    color: var(--accent-red);
+}
+
+.highlight-flash {
+    animation: flashInput 1s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes flashInput {
+    0% { background-color: rgba(0, 242, 254, 0.3); border-color: var(--accent-cyan); }
+    100% { background-color: transparent; }
+}
+

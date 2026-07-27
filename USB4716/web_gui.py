@@ -188,6 +188,77 @@ def get_last_logs(count=50):
         print(f"Error reading historical logs: {e}")
         return []
 
+def scan_host_usb_devices():
+    """Scans host PC for connected Advantech DAQ cards, USB-serial ports, and USB devices."""
+    detected = []
+
+    # 1. Advantech DAQNavi SDK Enumeration
+    try:
+        sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
+        from Automation.BDaq import WaveformAiCtrl
+        installed_devices = WaveformAiCtrl.getInstalledDevices()
+        for dev in installed_devices:
+            dev_desc = getattr(dev, 'Description', str(dev))
+            board_num = getattr(dev, 'BoardNumber', 0)
+            detected.append({
+                'id': dev_desc,
+                'name': f"Advantech {dev_desc}",
+                'type': 'Advantech DAQ Card',
+                'port': f"BID#{board_num}",
+                'vendor': 'Advantech',
+                'is_daq': True
+            })
+    except Exception as e:
+        print(f"[SCAN] Advantech SDK scan note: {e}")
+
+    # 2. USB Serial & COM Ports via PySerial
+    try:
+        import serial.tools.list_ports
+        ports = serial.tools.list_ports.comports()
+        for p in ports:
+            desc = p.description if p.description else p.device
+            mfg = p.manufacturer if hasattr(p, 'manufacturer') and p.manufacturer else 'USB Serial'
+            detected.append({
+                'id': p.device,
+                'name': f"{p.device} ({desc})",
+                'type': 'USB Serial Port',
+                'port': p.device,
+                'vendor': mfg,
+                'hwid': p.hwid if hasattr(p, 'hwid') else '',
+                'is_daq': False
+            })
+    except Exception as e:
+        print(f"[SCAN] Serial ports scan note: {e}")
+
+    # 3. Default Hardware & Simulation Fallbacks
+    detected.append({
+        'id': 'USB-4716,BID#0',
+        'name': 'USB-4716 Default Board (BID#0)',
+        'type': 'Advantech DAQ Default',
+        'port': 'BID#0',
+        'vendor': 'Advantech',
+        'is_daq': True
+    })
+
+    detected.append({
+        'id': 'USB-4716 (Mockup Mode)',
+        'name': 'USB-4716 Virtual Hardware (Driverless Simulation)',
+        'type': 'Mockup / Driverless',
+        'port': 'Virtual',
+        'vendor': 'Software Mock',
+        'is_daq': True
+    })
+
+    # Deduplicate by 'id' while retaining order
+    seen = set()
+    unique_detected = []
+    for d in detected:
+        if d['id'] not in seen:
+            seen.add(d['id'])
+            unique_detected.append(d)
+
+    return unique_detected
+
 @app.route('/')
 def home():
     return render_template('index.html')
@@ -212,6 +283,17 @@ def get_status():
         'run_mode': mode or 'mockup',
         'destination': dest
     })
+
+@app.route('/api/scan_usb', methods=['GET'])
+def api_scan_usb():
+    """Returns JSON list of detected USB and DAQ hardware devices on the host PC."""
+    devices = scan_host_usb_devices()
+    return jsonify({
+        'status': 'success',
+        'count': len(devices),
+        'devices': devices
+    })
+
 
 @socketio.on('connect')
 def handle_connect():

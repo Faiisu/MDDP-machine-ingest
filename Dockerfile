@@ -2,17 +2,23 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies & hardware USB libraries
+# Install system build tools, development headers, and USB system libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    g++ \
+    python3-dev \
+    libpq-dev \
     curl \
     libusb-1.0-0 \
     udev \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python requirements
+# Upgrade pip, setuptools, and wheel to guarantee binary wheel installation
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir --prefer-binary -r requirements.txt
 
 # Copy codebase and set permissions
 COPY . .

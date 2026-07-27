@@ -36,6 +36,22 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('start-btn').addEventListener('click', handleStartProcess);
     document.getElementById('stop-btn').addEventListener('click', handleStopProcess);
     document.getElementById('clear-console-btn').addEventListener('click', clearConsole);
+    
+    const scanBtn = document.getElementById('btn-scan-usb');
+    if (scanBtn) {
+        scanBtn.addEventListener('click', handleScanUsbDevices);
+    }
+
+    // Close scanned devices dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        const menu = document.getElementById('scanned-devices-menu');
+        const scanBtn = document.getElementById('btn-scan-usb');
+        if (menu && !menu.classList.contains('hidden')) {
+            if (!menu.contains(e.target) && !scanBtn.contains(e.target)) {
+                menu.classList.add('hidden');
+            }
+        }
+    });
 
     // Bind Socket.IO event listeners
     bindSocketEvents();
@@ -43,6 +59,72 @@ document.addEventListener('DOMContentLoaded', () => {
     // Start Phosphor Signal Trace Oscilloscope Animation
     initSignalTraceCanvas();
 });
+
+// Scan Host PC USB / DAQ Hardware
+async function handleScanUsbDevices() {
+    const scanBtn = document.getElementById('btn-scan-usb');
+    const menu = document.getElementById('scanned-devices-menu');
+    if (!scanBtn || !menu) return;
+
+    scanBtn.classList.add('scanning');
+    menu.innerHTML = '<div class="scan-loading"><span class="spinner"></span> Scanning Host PC USB Bus & DAQ Ports...</div>';
+    menu.classList.remove('hidden');
+
+    try {
+        const response = await fetch('/api/scan_usb');
+        const data = await response.json();
+
+        if (data.status === 'success' && data.devices && data.devices.length > 0) {
+            menu.innerHTML = '';
+            
+            const header = document.createElement('div');
+            header.className = 'scan-menu-header';
+            header.innerHTML = `<span>DETECTED HARDWARE PORTS (${data.devices.length})</span><button type="button" class="close-scan-btn">&times;</button>`;
+            menu.appendChild(header);
+
+            data.devices.forEach(dev => {
+                const item = document.createElement('div');
+                item.className = 'scan-item';
+                const badgeClass = dev.is_daq ? 'badge-daq' : 'badge-serial';
+                
+                item.innerHTML = `
+                    <div class="scan-item-main">
+                        <span class="scan-item-name">${dev.name}</span>
+                        <span class="scan-item-id monospace">${dev.id}</span>
+                    </div>
+                    <div class="scan-item-meta">
+                        <span class="badge ${badgeClass}">${dev.type}</span>
+                        <span class="scan-item-port text-muted">${dev.port}</span>
+                    </div>
+                `;
+
+                item.addEventListener('click', () => {
+                    const devInput = document.getElementById('DEVICE_DESCRIPTION');
+                    if (devInput) {
+                        devInput.value = dev.id;
+                        devInput.classList.add('highlight-flash');
+                        setTimeout(() => devInput.classList.remove('highlight-flash'), 1200);
+                    }
+                    menu.classList.add('hidden');
+                    showToast(`Selected device: ${dev.id}`);
+                });
+
+                menu.appendChild(item);
+            });
+
+            header.querySelector('.close-scan-btn').addEventListener('click', () => {
+                menu.classList.add('hidden');
+            });
+        } else {
+            menu.innerHTML = '<div class="scan-empty">No USB/DAQ devices detected on host PC.</div>';
+        }
+    } catch (err) {
+        console.error('Error scanning USB devices:', err);
+        menu.innerHTML = `<div class="scan-error">Failed to scan USB ports: ${err.message}</div>`;
+    } finally {
+        scanBtn.classList.remove('scanning');
+    }
+}
 
 // Phosphor Signal Trace Oscilloscope Animation
 let canvasPhase = 0;
