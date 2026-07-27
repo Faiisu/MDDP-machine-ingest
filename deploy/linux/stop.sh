@@ -10,6 +10,7 @@ cd "$PROJECT_ROOT" || exit 1
 
 PORTAL_PID_FILE=".portal.pid"
 DAQ_PID_FILE=".daq.pid"
+MUSASHI_II_PID_FILE=".musashi_ii.pid"
 MUSASHI_IV_PID_FILE=".musashi_iv.pid"
 PLOTTER_PID_FILE=".plotter.pid"
 
@@ -45,7 +46,21 @@ else
     echo "[SYSTEM] DAQ Control Panel is already stopped."
 fi
 
-# 3. Stop Musashi IV Control Panel
+# 3. Stop Musashi II Control Panel
+if [ -f "$MUSASHI_II_PID_FILE" ]; then
+    PID=$(cat "$MUSASHI_II_PID_FILE")
+    if ps -p "$PID" >/dev/null 2>&1; then
+        echo "[SYSTEM] Stopping Musashi II Control Panel (PID: $PID)..."
+        kill "$PID" 2>/dev/null
+    else
+        echo "[SYSTEM] Musashi II Control Panel process not found."
+    fi
+    rm "$MUSASHI_II_PID_FILE"
+else
+    echo "[SYSTEM] Musashi II Control Panel is already stopped."
+fi
+
+# 4. Stop Musashi IV Control Panel
 if [ -f "$MUSASHI_IV_PID_FILE" ]; then
     PID=$(cat "$MUSASHI_IV_PID_FILE")
     if ps -p "$PID" >/dev/null 2>&1; then
