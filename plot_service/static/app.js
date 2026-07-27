@@ -660,11 +660,13 @@ function togglePlotPause(plotId, btn) {
 function resolveBackLink() {
     const backLink = document.querySelector('.back-link');
     if (backLink) {
-        const hostname = window.location.hostname;
-        const originalHref = backLink.getAttribute('href');
-        if (originalHref && originalHref.includes('localhost')) {
-            backLink.setAttribute('href', originalHref.replace('localhost', hostname));
-        }
+        const hostname = window.location.hostname || 'localhost';
+        const targetUrl = `http://${hostname}:8080`;
+        backLink.setAttribute('href', targetUrl);
+        backLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.location.href = targetUrl;
+        });
     }
 }
 

@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initial API loads
     loadConfig();
     checkProcessStatus();
+    resolveBackLink();
 
     // Setup form submit handlers
     const form = document.getElementById('config-form');
@@ -483,4 +484,18 @@ function handleScaleChannelTargetChange(e) {
     currentScaleChannel = e.target.value;
     // 3. Load config of new channel into inputs
     loadScaleChannelToInputs(currentScaleChannel);
+}
+
+// Dynamically replace 'localhost' in back link with the accessing IP/hostname
+function resolveBackLink() {
+    const backLink = document.querySelector('.back-link');
+    if (backLink) {
+        const hostname = window.location.hostname || 'localhost';
+        const targetUrl = `http://${hostname}:8080`;
+        backLink.setAttribute('href', targetUrl);
+        backLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.location.href = targetUrl;
+        });
+    }
 }
