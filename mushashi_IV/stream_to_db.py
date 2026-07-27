@@ -48,7 +48,37 @@ def load_config():
         "STATS_INTERVAL_SEC": 5
     }
 
+def ensure_database_exists(dsn):
+    """
+    Checks if the database in DSN exists; if missing, auto-creates it using the 'postgres' maintenance DB.
+    """
+    try:
+        import psycopg2.extensions
+        parsed = psycopg2.extensions.make_dsn(dsn)
+        parts = psycopg2.extensions.parse_dsn(parsed)
+        target_dbname = parts.get("dbname")
+
+        if target_dbname:
+            maint_parts = dict(parts)
+            maint_parts["dbname"] = "postgres"
+            maint_dsn = psycopg2.extensions.make_dsn(**maint_parts)
+            try:
+                maint_conn = psycopg2.connect(maint_dsn, connect_timeout=5)
+                maint_conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+                with maint_conn.cursor() as cur:
+                    cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (target_dbname,))
+                    if not cur.fetchone():
+                        log.info(f"Database '{target_dbname}' does not exist. Creating database...")
+                        cur.execute(f'CREATE DATABASE "{target_dbname}"')
+                        log.info(f"Database '{target_dbname}' auto-created successfully.")
+                maint_conn.close()
+            except Exception as me:
+                log.warning(f"Maintenance DB check/creation warning: {me}")
+    except Exception as e:
+                log.warning(f"Failed to check/create database: {e}")
+
 def get_db_connection(dsn, retries=3, delay=1.0):
+    ensure_database_exists(dsn)
     for attempt in range(1, retries + 1):
         try:
             conn = psycopg2.connect(dsn, connect_timeout=5)
@@ -186,8 +216,14 @@ def insert_record(conn, rec):
         %(bkup_corr_press)s, %(bkup_corr_vac)s, %(raw_json)s
     ) ON CONFLICT (time, ch_no) DO NOTHING;
     """
-    with conn.cursor() as cur:
-        cur.execute(sql, rec)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, rec)
+    except Exception as e:
+        log.warning(f"Insert failed ({e}). Auto-initializing database/schema and retrying...")
+        init_db_schema(conn)
+        with conn.cursor() as cur:
+            cur.execute(sql, rec)
 
 def run_ingestion():
     cfg = load_config()

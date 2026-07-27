@@ -388,6 +388,10 @@ class TimescaleDBClient:
     def connect(self):
         while not self.stop_event.is_set():
             try:
+                try:
+                    ensure_mockup_db()
+                except Exception as ne:
+                    log.warning(f"[MockDB] Auto DB check warning: {ne}")
                 self.conn = psycopg2.connect(self.dsn)
                 self.conn.autocommit = False
                 self.cur = self.conn.cursor()
@@ -406,10 +410,28 @@ class TimescaleDBClient:
         if not self.conn or not self.cur:
             raise RuntimeError("Not connected to database")
         INSERT_SQL = "INSERT INTO daq_samples (time, channel, value) VALUES %s"
-        psycopg2.extras.execute_values(
-            self.cur, INSERT_SQL, rows, page_size=page_size
-        )
-        self.conn.commit()
+        try:
+            psycopg2.extras.execute_values(
+                self.cur, INSERT_SQL, rows, page_size=page_size
+            )
+            self.conn.commit()
+        except Exception as e:
+            self.rollback()
+            log.warning(f"[MockDB] Database insert failed ({e}). Auto-creating database/tables and retrying...")
+            try:
+                ensure_mockup_db()
+                self.conn = psycopg2.connect(self.dsn)
+                self.conn.autocommit = False
+                self.cur = self.conn.cursor()
+                psycopg2.extras.execute_values(
+                    self.cur, INSERT_SQL, rows, page_size=page_size
+                )
+                self.conn.commit()
+                log.info("[MockDB] Insertion succeeded after auto-creating database/tables.")
+                return
+            except Exception as retry_err:
+                log.error(f"[MockDB] Retry insertion after auto-creation failed: {retry_err}")
+            raise
 
     def send_samples(self, rows, page_size=1000):
         self.insert_samples(rows, page_size=page_size)

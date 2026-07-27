@@ -22,33 +22,77 @@ class DatabaseHandler:
         self.init_db()
 
     def connect(self):
-        """Establishes connection to the configured database."""
+        """Establishes connection to the configured database. Auto-creates DB if missing."""
         if self.db_type == "sqlite":
             self.conn = sqlite3.connect(self.db_name, check_same_thread=False)
             logger.info(f"Connected to SQLite database: {self.db_name}")
         elif self.db_type in ("postgres", "postgresql", "timescaledb"):
             try:
                 import psycopg2
-                self.conn = psycopg2.connect(
-                    dbname=self.db_name,
-                    user=self.config.get("user", "postgres"),
-                    password=self.config.get("password", ""),
-                    host=self.config.get("host", "localhost"),
-                    port=self.config.get("port", 5432)
-                )
+                try:
+                    self.conn = psycopg2.connect(
+                        dbname=self.db_name,
+                        user=self.config.get("user", "postgres"),
+                        password=self.config.get("password", ""),
+                        host=self.config.get("host", "localhost"),
+                        port=self.config.get("port", 5432)
+                    )
+                except psycopg2.OperationalError as oe:
+                    logger.warning(f"Connecting to database '{self.db_name}' failed ({oe}). Attempting database creation...")
+                    maint_conn = psycopg2.connect(
+                        dbname="postgres",
+                        user=self.config.get("user", "postgres"),
+                        password=self.config.get("password", ""),
+                        host=self.config.get("host", "localhost"),
+                        port=self.config.get("port", 5432)
+                    )
+                    maint_conn.autocommit = True
+                    with maint_conn.cursor() as cur:
+                        cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (self.db_name,))
+                        if not cur.fetchone():
+                            cur.execute(f'CREATE DATABASE "{self.db_name}"')
+                            logger.info(f"Database '{self.db_name}' auto-created successfully.")
+                    maint_conn.close()
+                    self.conn = psycopg2.connect(
+                        dbname=self.db_name,
+                        user=self.config.get("user", "postgres"),
+                        password=self.config.get("password", ""),
+                        host=self.config.get("host", "localhost"),
+                        port=self.config.get("port", 5432)
+                    )
                 logger.info(f"Connected to PostgreSQL database: {self.db_name} at {self.config.get('host')}")
             except ImportError:
                 raise ImportError("psycopg2 package is required for PostgreSQL connections.")
         elif self.db_type == "mysql":
             try:
                 import mysql.connector
-                self.conn = mysql.connector.connect(
-                    database=self.db_name,
-                    user=self.config.get("user", "root"),
-                    password=self.config.get("password", ""),
-                    host=self.config.get("host", "localhost"),
-                    port=self.config.get("port", 3306)
-                )
+                try:
+                    self.conn = mysql.connector.connect(
+                        database=self.db_name,
+                        user=self.config.get("user", "root"),
+                        password=self.config.get("password", ""),
+                        host=self.config.get("host", "localhost"),
+                        port=self.config.get("port", 3306)
+                    )
+                except Exception as me:
+                    logger.warning(f"Connecting to MySQL database '{self.db_name}' failed ({me}). Attempting database creation...")
+                    maint_conn = mysql.connector.connect(
+                        user=self.config.get("user", "root"),
+                        password=self.config.get("password", ""),
+                        host=self.config.get("host", "localhost"),
+                        port=self.config.get("port", 3306)
+                    )
+                    with maint_conn.cursor() as cur:
+                        cur.execute(f"CREATE DATABASE IF NOT EXISTS `{self.db_name}`")
+                        logger.info(f"MySQL database '{self.db_name}' auto-created successfully.")
+                    maint_conn.close()
+                    self.conn = mysql.connector.connect(
+                        database=self.db_name,
+                        user=self.config.get("user", "root"),
+                        password=self.config.get("password", ""),
+                        host=self.config.get("host", "localhost"),
+                        port=self.config.get("port", 3306)
+                    )
                 logger.info(f"Connected to MySQL database: {self.db_name} at {self.config.get('host')}")
             except ImportError:
                 raise ImportError("mysql-connector-python package is required for MySQL connections.")
@@ -123,7 +167,6 @@ class DatabaseHandler:
         :param data: Dictionary containing telemetry parameters from MusashiDispenser
         :return: Inserted record ID or boolean success
         """
-        cursor = self.conn.cursor()
         now_dt = datetime.datetime.now(datetime.timezone.utc)
         if self.db_type == "sqlite":
             db_timestamp = now_dt.isoformat(" ")
@@ -174,12 +217,25 @@ class DatabaseHandler:
                 data.get("raw_payload", "")
             )
 
-        cursor.execute(query, params)
-        self.conn.commit()
-        last_row_id = getattr(cursor, "lastrowid", None)
-        cursor.close()
-        logger.info(f"Inserted record into '{self.table_name}' at {now_dt}")
-        return last_row_id
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(query, params)
+            self.conn.commit()
+            last_row_id = getattr(cursor, "lastrowid", None)
+            cursor.close()
+            logger.info(f"Inserted record into '{self.table_name}' at {now_dt}")
+            return last_row_id
+        except Exception as e:
+            logger.warning(f"Telemetry insert failed ({e}). Auto-creating database/table and retrying...")
+            self.connect()
+            self.init_db()
+            cursor = self.conn.cursor()
+            cursor.execute(query, params)
+            self.conn.commit()
+            last_row_id = getattr(cursor, "lastrowid", None)
+            cursor.close()
+            logger.info(f"Inserted record into '{self.table_name}' after auto-creation at {now_dt}")
+            return last_row_id
 
     def close(self):
         """Closes the database connection cleanly."""

@@ -1,0 +1,27 @@
+services:
+
+  # Optional Test Plugins (TimescaleDB & Mosquitto MQTT Broker)
+  # Uncomment the services below if running local database / broker containers
+  #
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: daq_tsdb
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: daq_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+      - ./db_setup.sql:/docker-entrypoint-initdb.d/init.sql
+  
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: daq_mqtt
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    command: sh -c 'echo "listener 1883\nallow_anonymous true" > /mosquitto/config/mosquitto.conf && /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf'

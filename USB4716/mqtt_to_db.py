@@ -46,6 +46,77 @@ stats = {
     "db_errors": 0,
 }
 
+def ensure_db_and_tables(dsn):
+    """
+    Auto-creates database if missing and auto-creates required tables/hypertable/indexes if missing.
+    """
+    try:
+        import psycopg2.extensions
+        parsed = psycopg2.extensions.make_dsn(dsn)
+        parts = psycopg2.extensions.parse_dsn(parsed)
+        target_dbname = parts.get("dbname")
+
+        if target_dbname:
+            maint_parts = dict(parts)
+            maint_parts["dbname"] = "postgres"
+            maint_dsn = psycopg2.extensions.make_dsn(**maint_parts)
+            try:
+                maint_conn = psycopg2.connect(maint_dsn, connect_timeout=5)
+                maint_conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+                with maint_conn.cursor() as cur:
+                    cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (target_dbname,))
+                    if not cur.fetchone():
+                        log.info(f"[DBSetup] Database '{target_dbname}' does not exist. Creating database...")
+                        cur.execute(f'CREATE DATABASE "{target_dbname}"')
+                        log.info(f"[DBSetup] Database '{target_dbname}' created successfully.")
+                maint_conn.close()
+            except Exception as me:
+                log.warning(f"[DBSetup] Maintenance DB check/creation warning: {me}")
+
+        target_conn = psycopg2.connect(dsn, connect_timeout=5)
+        target_conn.autocommit = True
+        with target_conn.cursor() as cur:
+            try:
+                cur.execute("CREATE EXTENSION IF NOT EXISTS timescaledb;")
+            except Exception:
+                pass
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS daq_samples (
+                    time        TIMESTAMPTZ      NOT NULL,
+                    channel     SMALLINT         NOT NULL,
+                    value       DOUBLE PRECISION NOT NULL
+                );
+            """)
+
+            try:
+                cur.execute("SELECT create_hypertable('daq_samples', 'time', if_not_exists => TRUE);")
+            except Exception:
+                pass
+
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_daq_channel_time
+                    ON daq_samples (channel, time DESC);
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS daq_sessions (
+                    id            SERIAL PRIMARY KEY,
+                    started_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    stopped_at    TIMESTAMPTZ,
+                    channel_count SMALLINT    NOT NULL,
+                    clock_rate_hz INTEGER     NOT NULL,
+                    notes         TEXT
+                );
+            """)
+        target_conn.close()
+        log.info("[DBSetup] Database and table schema verified/auto-created.")
+        return True
+    except Exception as e:
+        log.error(f"[DBSetup] Auto creation of database/tables failed: {e}")
+        return False
+
+
 class TimescaleDBClient:
     def __init__(self, dsn, stop_event):
         self.dsn = dsn
@@ -56,6 +127,7 @@ class TimescaleDBClient:
     def connect(self):
         while not self.stop_event.is_set():
             try:
+                ensure_db_and_tables(self.dsn)
                 self.conn = psycopg2.connect(self.dsn)
                 self.conn.autocommit = False
                 self.cur = self.conn.cursor()
@@ -73,8 +145,24 @@ class TimescaleDBClient:
         if not self.conn or not self.cur:
             raise RuntimeError("Not connected to database")
         INSERT_SQL = "INSERT INTO daq_samples (time, channel, value) VALUES %s"
-        psycopg2.extras.execute_values(self.cur, INSERT_SQL, rows, page_size=1000)
-        self.conn.commit()
+        try:
+            psycopg2.extras.execute_values(self.cur, INSERT_SQL, rows, page_size=1000)
+            self.conn.commit()
+        except Exception as e:
+            self.rollback()
+            log.warning(f"Database insert failed ({e}). Auto-creating database/tables and retrying...")
+            if ensure_db_and_tables(self.dsn):
+                try:
+                    self.conn = psycopg2.connect(self.dsn)
+                    self.conn.autocommit = False
+                    self.cur = self.conn.cursor()
+                    psycopg2.extras.execute_values(self.cur, INSERT_SQL, rows, page_size=1000)
+                    self.conn.commit()
+                    log.info("Insertion succeeded after auto-creating database/tables.")
+                    return
+                except Exception as retry_err:
+                    log.error(f"Retry insertion after auto-creation failed: {retry_err}")
+            raise
 
     def rollback(self):
         if self.conn:
