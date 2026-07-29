@@ -178,20 +178,45 @@ function initSignalTraceCanvas() {
 
 // Toggle visibility of Destination settings (shows ONLY selected destination)
 function toggleDestinationFields() {
-    const dest = document.getElementById('DESTINATION')?.value || 'database';
+    const dest = document.getElementById('DESTINATION')?.value || 'postgresql';
+    const postgresGroup = document.getElementById('postgres-config-group');
+    const influxGroup = document.getElementById('influx-config-group');
     const mqttGroup = document.getElementById('mqtt-config-group');
-    const dbGroup = document.getElementById('db-config-group');
 
-    if (mqttGroup && dbGroup) {
+    if (postgresGroup && influxGroup && mqttGroup) {
         if (dest === 'mqtt') {
+            postgresGroup.style.display = 'none';
+            influxGroup.style.display = 'none';
             mqttGroup.style.display = 'flex';
-            dbGroup.style.display = 'none';
-        } else {
+        } else if (dest === 'influxdb') {
+            postgresGroup.style.display = 'none';
+            influxGroup.style.display = 'flex';
             mqttGroup.style.display = 'none';
-            dbGroup.style.display = 'flex';
+        } else {
+            postgresGroup.style.display = 'flex';
+            influxGroup.style.display = 'none';
+            mqttGroup.style.display = 'none';
         }
     }
 }
+
+// Auto-generate DSN from split PostgreSQL fields
+function syncPostgresDsn() {
+    const host = document.getElementById('DB_HOST')?.value.trim() || 'localhost';
+    const port = document.getElementById('DB_PORT')?.value.trim() || '5432';
+    const user = document.getElementById('DB_USER')?.value.trim() || 'admin';
+    const pass = document.getElementById('DB_PASSWORD')?.value.trim() || 'admin';
+    const name = document.getElementById('DB_NAME')?.value.trim() || 'daq_db';
+    const dsnEl = document.getElementById('DB_DSN');
+    if (dsnEl) dsnEl.value = `postgresql://${user}:${pass}@${host}:${port}/${name}`;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    ['DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_NAME'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', syncPostgresDsn);
+    });
+});
 
 // Toggle visibility of TLS certificate fields
 function toggleTlsFields() {

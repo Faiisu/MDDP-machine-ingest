@@ -501,11 +501,67 @@ class MQTTClient:
         log.info("Disconnected from MQTT broker.")
 
 
+class InfluxDBClient:
+    """
+    Responsibility: Manage InfluxDB HTTP Line Protocol telemetry writes.
+    """
+    def __init__(self, url, token, org, bucket, measurement="daq_telemetry", stop_event=None):
+        self.url = (url or "http://localhost:8086").rstrip('/')
+        self.token = token or ""
+        self.org = org or "mddp"
+        self.bucket = bucket or "daq_telemetry"
+        self.measurement = measurement or "daq_telemetry"
+        self.stop_event = stop_event or threading.Event()
+        self.write_url = f"{self.url}/api/v2/write?org={urllib.parse.quote(self.org)}&bucket={urllib.parse.quote(self.bucket)}&precision=s"
+
+    def connect(self):
+        target_url = f"{self.url}/health"
+        headers = {"User-Agent": "USB4716-Writer"}
+        if self.token:
+            headers["Authorization"] = f"Token {self.token}"
+        try:
+            req = urllib.request.Request(target_url, headers=headers, method="GET")
+            with urllib.request.urlopen(req, timeout=3.0) as resp:
+                log.info(f"Connected to InfluxDB at {self.url} (Org: {self.org}, Bucket: {self.bucket})")
+                return True
+        except Exception as e:
+            log.warning(f"InfluxDB health check notice ({e}). Client will attempt line protocol writes.")
+            return True
+
+    def insert_batch(self, batch_tuples):
+        if not batch_tuples:
+            return
+        lines = []
+        for (wall_ts_ns, ch_idx, volt, scaled_val) in batch_tuples:
+            ts_sec = int(wall_ts_ns / 1e9)
+            fields = f"voltage={volt},scaled={scaled_val}"
+            lines.append(f"{self.measurement},ch={ch_idx} {fields} {ts_sec}")
+
+        body = "\n".join(lines).encode('utf-8')
+        headers = {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Accept": "application/json"
+        }
+        if self.token:
+            headers["Authorization"] = f"Token {self.token}"
+
+        req = urllib.request.Request(self.write_url, data=body, headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=4.0) as resp:
+            if resp.status not in (200, 204):
+                raise Exception(f"InfluxDB HTTP status {resp.status}")
+
+    def publish_batch(self, batch_tuples):
+        self.insert_batch(batch_tuples)
+
+    def disconnect(self):
+        log.info("InfluxDB client disconnected.")
+
+
 # ─── Data Writer Thread ───────────────────────────────────────────────────────
 def db_writer_thread():
     """
     Responsibility: dequeue raw batches, delegate parsing, delegate writing/publishing.
-    Supports both TimescaleDB insertion and MQTT publishing based on config.DESTINATION.
+    Supports TimescaleDB, InfluxDB, and MQTT publishing based on config.DESTINATION.
     Non-daemon thread — will flush remaining queue items before process exits.
     """
     calibrator = Calibrator(
@@ -536,6 +592,15 @@ def db_writer_thread():
             ca_certs=getattr(config, 'MQTT_CA_CERTS', ''),
             certfile=getattr(config, 'MQTT_CLIENT_CERT', ''),
             keyfile=getattr(config, 'MQTT_CLIENT_KEY', ''),
+            stop_event=stop_event
+        )
+    elif destination == 'influxdb':
+        client = InfluxDBClient(
+            url=getattr(config, 'INFLUX_URL', 'http://localhost:8086'),
+            token=getattr(config, 'INFLUX_TOKEN', ''),
+            org=getattr(config, 'INFLUX_ORG', 'mddp'),
+            bucket=getattr(config, 'INFLUX_BUCKET', 'daq_telemetry'),
+            measurement=getattr(config, 'INFLUX_MEASUREMENT', 'daq_telemetry'),
             stop_event=stop_event
         )
     else:

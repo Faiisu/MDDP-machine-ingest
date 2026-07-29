@@ -35,7 +35,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const dbUserInput = document.getElementById('DB_USER');
     const dbPasswordInput = document.getElementById('DB_PASSWORD');
     const dbTableInput = document.getElementById('DB_TABLE');
+
+    const influxUrlInput = document.getElementById('INFLUX_URL');
+    const influxOrgInput = document.getElementById('INFLUX_ORG');
+    const influxBucketInput = document.getElementById('INFLUX_BUCKET');
+    const influxMeasurementInput = document.getElementById('INFLUX_MEASUREMENT');
+    const influxTokenInput = document.getElementById('INFLUX_TOKEN');
+
+    const sqlitePathInput = document.getElementById('SQLITE_PATH');
+
     const postgresGroup = document.getElementById('postgres-config-group');
+    const influxGroup = document.getElementById('influx-config-group');
+    const sqliteGroup = document.getElementById('sqlite-config-group');
 
     // Action & Test Buttons
     const btnTestSerial = document.getElementById('btn-test-serial');
@@ -57,12 +68,21 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(updateClock, 1000);
     updateClock();
 
-    // Toggle Postgres vs SQLite Form Fields
+    // Toggle Postgres vs InfluxDB vs SQLite Form Fields
     function updateDbFieldsVisibility() {
-        if (dbTypeSelect.value === 'sqlite') {
-            postgresGroup.style.display = 'none';
-        } else {
-            postgresGroup.style.display = 'block';
+        const val = dbTypeSelect.value;
+        if (val === 'postgresql') {
+            if (postgresGroup) postgresGroup.style.display = 'block';
+            if (influxGroup) influxGroup.style.display = 'none';
+            if (sqliteGroup) sqliteGroup.style.display = 'none';
+        } else if (val === 'influxdb') {
+            if (postgresGroup) postgresGroup.style.display = 'none';
+            if (influxGroup) influxGroup.style.display = 'block';
+            if (sqliteGroup) sqliteGroup.style.display = 'none';
+        } else if (val === 'sqlite') {
+            if (postgresGroup) postgresGroup.style.display = 'none';
+            if (influxGroup) influxGroup.style.display = 'none';
+            if (sqliteGroup) sqliteGroup.style.display = 'block';
         }
     }
     dbTypeSelect.addEventListener('change', updateDbFieldsVisibility);
@@ -75,22 +95,30 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             
             const serial = data.serial || {};
-            serialPortInput.value = serial.port || '';
-            serialBaudrate.value = serial.baudrate || 9600;
-            serialTimeout.value = serial.timeout || 2.0;
-            serialChannel.value = serial.channel || 1;
+            if (serialPortInput) serialPortInput.value = serial.port || '';
+            if (serialBaudrate) serialBaudrate.value = serial.baudrate || 9600;
+            if (serialTimeout) serialTimeout.value = serial.timeout || 2.0;
+            if (serialChannel) serialChannel.value = serial.channel || 1;
 
             const acq = data.acquisition || {};
-            acqInterval.value = acq.interval_time || 1.0;
+            if (acqInterval) acqInterval.value = acq.interval_time || 1.0;
 
             const db = data.database || {};
-            dbTypeSelect.value = db.db_type || 'postgresql';
-            dbNameInput.value = db.db_name || 'mddp_lab';
-            dbHostInput.value = db.host || '100.81.77.113';
-            dbPortInput.value = db.port || 10001;
-            dbUserInput.value = db.user || 'admin';
-            dbPasswordInput.value = db.password || 'admin';
-            dbTableInput.value = db.table_name || 'musashi_telemetry';
+            if (dbTypeSelect) dbTypeSelect.value = db.db_type || 'postgresql';
+            if (dbNameInput) dbNameInput.value = db.db_name || 'mddp_lab';
+            if (dbHostInput) dbHostInput.value = db.host || '100.81.77.113';
+            if (dbPortInput) dbPortInput.value = db.port || 10001;
+            if (dbUserInput) dbUserInput.value = db.user || 'admin';
+            if (dbPasswordInput) dbPasswordInput.value = db.password || 'admin';
+            if (dbTableInput) dbTableInput.value = db.table_name || 'musashi_telemetry';
+
+            if (influxUrlInput) influxUrlInput.value = db.influx_url || 'http://localhost:8086';
+            if (influxOrgInput) influxOrgInput.value = db.influx_org || 'mddp';
+            if (influxBucketInput) influxBucketInput.value = db.influx_bucket || 'musashi_telemetry';
+            if (influxMeasurementInput) influxMeasurementInput.value = db.influx_measurement || 'musashi_telemetry';
+            if (influxTokenInput) influxTokenInput.value = db.influx_token || '';
+
+            if (sqlitePathInput) sqlitePathInput.value = db.sqlite_path || 'musashi_data.db';
 
             updateDbFieldsVisibility();
             appendLog('[SYSTEM] Loaded configuration from server.');
@@ -111,12 +139,18 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             database: {
                 db_type: dbTypeSelect.value,
-                db_name: dbNameInput.value.trim(),
-                table_name: dbTableInput.value.trim(),
-                host: dbHostInput.value.trim(),
-                port: parseInt(dbPortInput.value, 10),
-                user: dbUserInput.value.trim(),
-                password: dbPasswordInput.value.trim(),
+                db_name: dbNameInput ? dbNameInput.value.trim() : 'mddp_lab',
+                table_name: dbTableInput ? dbTableInput.value.trim() : 'musashi_telemetry',
+                host: dbHostInput ? dbHostInput.value.trim() : 'localhost',
+                port: dbPortInput ? parseInt(dbPortInput.value, 10) : 5432,
+                user: dbUserInput ? dbUserInput.value.trim() : 'admin',
+                password: dbPasswordInput ? dbPasswordInput.value.trim() : 'admin',
+                influx_url: influxUrlInput ? influxUrlInput.value.trim() : 'http://localhost:8086',
+                influx_org: influxOrgInput ? influxOrgInput.value.trim() : 'mddp',
+                influx_bucket: influxBucketInput ? influxBucketInput.value.trim() : 'musashi_telemetry',
+                influx_measurement: influxMeasurementInput ? influxMeasurementInput.value.trim() : 'musashi_telemetry',
+                influx_token: influxTokenInput ? influxTokenInput.value.trim() : '',
+                sqlite_path: sqlitePathInput ? sqlitePathInput.value.trim() : 'musashi_data.db',
                 description: "Database storage for MUSASHI Super ΣCMII Dispenser telemetry data"
             },
             acquisition: {
@@ -217,11 +251,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const payload = {
             database: {
                 db_type: dbTypeSelect.value,
-                db_name: dbNameInput.value.trim(),
-                host: dbHostInput.value.trim(),
-                port: parseInt(dbPortInput.value, 10),
-                user: dbUserInput.value.trim(),
-                password: dbPasswordInput.value.trim()
+                db_name: dbNameInput ? dbNameInput.value.trim() : 'mddp_lab',
+                host: dbHostInput ? dbHostInput.value.trim() : 'localhost',
+                port: dbPortInput ? parseInt(dbPortInput.value, 10) : 5432,
+                user: dbUserInput ? dbUserInput.value.trim() : 'admin',
+                password: dbPasswordInput ? dbPasswordInput.value.trim() : 'admin',
+                influx_url: influxUrlInput ? influxUrlInput.value.trim() : 'http://localhost:8086',
+                influx_org: influxOrgInput ? influxOrgInput.value.trim() : 'mddp',
+                influx_bucket: influxBucketInput ? influxBucketInput.value.trim() : 'musashi_telemetry',
+                influx_token: influxTokenInput ? influxTokenInput.value.trim() : '',
+                sqlite_path: sqlitePathInput ? sqlitePathInput.value.trim() : 'musashi_data.db'
             }
         };
         try {

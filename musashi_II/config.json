@@ -13,6 +13,12 @@
     "port": 10001,
     "user": "admin",
     "password": "admin",
+    "influx_url": "http://localhost:8086",
+    "influx_token": "my-influx-token",
+    "influx_org": "mddp",
+    "influx_bucket": "musashi_telemetry",
+    "influx_measurement": "musashi_telemetry",
+    "sqlite_path": "musashi_data.db",
     "description": "Database storage for MUSASHI Super ΣCMII Dispenser telemetry data"
   },
   "acquisition": {

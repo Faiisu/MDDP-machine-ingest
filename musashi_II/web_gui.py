@@ -338,19 +338,40 @@ def test_db():
     db_cfg = req.get('database') or read_config().get('database', {})
     db_type = db_cfg.get('db_type', 'sqlite')
     
-    if db_type == 'postgresql':
+    if db_type in ('postgresql', 'timescaledb'):
         try:
             import psycopg2
             dsn = f"postgresql://{db_cfg.get('user', 'admin')}:{db_cfg.get('password', 'admin')}@{db_cfg.get('host', 'localhost')}:{db_cfg.get('port', 5432)}/{db_cfg.get('db_name', 'mddp_lab')}"
             conn = psycopg2.connect(dsn, connect_timeout=3)
             conn.close()
-            return jsonify({'success': True, 'message': f'PostgreSQL connection to {db_cfg.get("host")}:{db_cfg.get("port")}/{db_cfg.get("db_name")} successful!'})
+            return jsonify({'success': True, 'message': f'{db_type.upper()} connection to {db_cfg.get("host")}:{db_cfg.get("port")}/{db_cfg.get("db_name")} successful!'})
         except Exception as e:
-            return jsonify({'success': False, 'message': f'PostgreSQL connection error: {str(e)}'})
+            return jsonify({'success': False, 'message': f'{db_type.upper()} connection error: {str(e)}'})
+    elif db_type == 'influxdb':
+        url = db_cfg.get('influx_url', 'http://localhost:8086').rstrip('/')
+        token = db_cfg.get('influx_token', '')
+        org = db_cfg.get('influx_org', 'mddp')
+        bucket = db_cfg.get('influx_bucket', 'musashi_telemetry')
+
+        target_url = f"{url}/health"
+        headers = {"User-Agent": "MusashiII-TestClient"}
+        if token:
+            headers["Authorization"] = f"Token {token}"
+
+        try:
+            import urllib.request
+            req_obj = urllib.request.Request(target_url, headers=headers, method="GET")
+            with urllib.request.urlopen(req_obj, timeout=3.0) as resp:
+                if resp.status in (200, 204):
+                    return jsonify({'success': True, 'message': f'InfluxDB server at {url} is HEALTHY! (Org: {org}, Bucket: {bucket})'})
+                else:
+                    return jsonify({'success': False, 'message': f'InfluxDB returned HTTP status {resp.status}'})
+        except Exception as e:
+            return jsonify({'success': False, 'message': f'InfluxDB connection error: {str(e)}'})
     else:
         try:
             import sqlite3
-            db_name = db_cfg.get('db_name', 'musashi_data.db')
+            db_name = db_cfg.get('sqlite_path') or db_cfg.get('db_name', 'musashi_data.db')
             db_path = db_name if os.path.isabs(db_name) else os.path.join(BASE_DIR, db_name)
             conn = sqlite3.connect(db_path)
             conn.close()

@@ -293,6 +293,53 @@ def save_config():
         return jsonify({'status': 'success'})
     return jsonify({'status': 'error', 'message': 'Failed to save configuration.'}), 500
 
+@app.route('/api/test_db', methods=['POST'])
+def test_db():
+    req = request.get_json() or {}
+    cfg = read_config()
+    dest = req.get('DESTINATION') or req.get('destination') or cfg.get('DESTINATION', 'postgresql')
+
+    if dest == 'influxdb':
+        url = req.get('INFLUX_URL') or cfg.get('INFLUX_URL', 'http://localhost:8086')
+        token = req.get('INFLUX_TOKEN') or cfg.get('INFLUX_TOKEN', '')
+        org = req.get('INFLUX_ORG') or cfg.get('INFLUX_ORG', 'mddp')
+        bucket = req.get('INFLUX_BUCKET') or cfg.get('INFLUX_BUCKET', 'daq_telemetry')
+
+        target_url = f"{url.rstrip('/')}/health"
+        headers = {"User-Agent": "USB4716-TestClient"}
+        if token:
+            headers["Authorization"] = f"Token {token}"
+
+        try:
+            import urllib.request
+            req_obj = urllib.request.Request(target_url, headers=headers, method="GET")
+            with urllib.request.urlopen(req_obj, timeout=4.0) as resp:
+                if resp.status in (200, 204):
+                    return jsonify({'success': True, 'message': f'InfluxDB server at {url} is HEALTHY! (Org: {org}, Bucket: {bucket})'})
+                else:
+                    return jsonify({'success': False, 'message': f'InfluxDB returned HTTP status {resp.status}'})
+        except Exception as e:
+            return jsonify({'success': False, 'message': f'InfluxDB connection error: {str(e)}'})
+    elif dest == 'mqtt':
+        return jsonify({'success': True, 'message': 'MQTT Broker target configured.'})
+    else:
+        dsn = req.get('DB_DSN') or cfg.get('DB_DSN')
+        if not dsn:
+            host = req.get('DB_HOST') or cfg.get('DB_HOST', 'localhost')
+            port = req.get('DB_PORT') or cfg.get('DB_PORT', 5432)
+            user = req.get('DB_USER') or cfg.get('DB_USER', 'admin')
+            password = req.get('DB_PASSWORD') or cfg.get('DB_PASSWORD', 'admin')
+            dbname = req.get('DB_NAME') or cfg.get('DB_NAME', 'daq_db')
+            dsn = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
+
+        try:
+            import psycopg2
+            conn = psycopg2.connect(dsn, connect_timeout=3)
+            conn.close()
+            return jsonify({'success': True, 'message': 'PostgreSQL/TimescaleDB connection successful!'})
+        except Exception as e:
+            return jsonify({'success': False, 'message': f'PostgreSQL connection error: {str(e)}'})
+
 @app.route('/api/status', methods=['GET'])
 def get_status():
     pid, mode = get_running_process()

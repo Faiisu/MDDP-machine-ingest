@@ -5,7 +5,7 @@ stream_to_db.py
 ───────────────
 Musashi IV Data Ingestion Daemon.
 Periodically fetches channel data from Musashi IV REST API, formats response,
-and inserts into TimescaleDB / PostgreSQL database.
+and inserts into TimescaleDB / PostgreSQL, InfluxDB v2, or SQLite database.
 """
 
 import os
@@ -13,8 +13,12 @@ import sys
 import time
 import json
 import signal
+import sqlite3
 import threading
 import logging
+import urllib.request
+import urllib.parse
+import urllib.error
 from datetime import datetime, timezone
 import math
 import random
@@ -43,7 +47,14 @@ def load_config():
         "API_URL": "http://172.16.48.198:1025/v1/info/channel/data/1",
         "CHANNEL_NO": 1,
         "TIME_INTERVAL": 1.0,
+        "DB_TYPE": "postgresql",
         "DB_DSN": "postgresql://admin:admin@localhost:5432/daq_db",
+        "INFLUX_URL": "http://localhost:8086",
+        "INFLUX_TOKEN": "my-influx-auth-token",
+        "INFLUX_ORG": "mddp",
+        "INFLUX_BUCKET": "musashi_telemetry",
+        "INFLUX_MEASUREMENT": "musashi_iv_data",
+        "SQLITE_PATH": "musashi_iv.db",
         "MOCKUP_MODE": True,
         "STATS_INTERVAL_SEC": 5
     }
@@ -75,7 +86,7 @@ def ensure_database_exists(dsn):
             except Exception as me:
                 log.warning(f"Maintenance DB check/creation warning: {me}")
     except Exception as e:
-                log.warning(f"Failed to check/create database: {e}")
+        log.warning(f"Failed to check/create database: {e}")
 
 def get_db_connection(dsn, retries=3, delay=1.0):
     ensure_database_exists(dsn)
@@ -139,13 +150,81 @@ def init_db_schema(conn):
     """
     with conn.cursor() as cur:
         cur.execute(create_table_sql)
-        # Attempt creating TimescaleDB hypertable
         try:
             cur.execute("SELECT create_hypertable('musashi_iv_data', 'time', if_not_exists => TRUE);")
             log.info("TimescaleDB hypertable 'musashi_iv_data' ensured.")
         except Exception:
-            # PostgreSQL without TimescaleDB extension active
             pass
+
+def init_sqlite_db(path):
+    conn = sqlite3.connect(path)
+    cur = conn.cursor()
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS musashi_iv_data (
+        time TEXT NOT NULL,
+        ch_no INTEGER NOT NULL,
+        shot_mode INTEGER,
+        dis_press REAL,
+        dis_vacuum REAL,
+        dis_time REAL,
+        raw_json TEXT,
+        PRIMARY KEY (time, ch_no)
+    );
+    """)
+    conn.commit()
+    return conn
+
+def insert_record_sqlite(conn, rec):
+    sql = """
+    INSERT OR IGNORE INTO musashi_iv_data (
+        time, ch_no, shot_mode, dis_press, dis_vacuum, dis_time, raw_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?);
+    """
+    cur = conn.cursor()
+    cur.execute(sql, (
+        str(rec.get('time')),
+        rec.get('ch_no'),
+        rec.get('shot_mode'),
+        rec.get('dis_press'),
+        rec.get('dis_vacuum'),
+        rec.get('dis_time'),
+        json.dumps(rec.get('raw_json', {}))
+    ))
+    conn.commit()
+
+def insert_record_influx(cfg, rec):
+    url = cfg.get("INFLUX_URL", "http://localhost:8086").rstrip('/')
+    token = cfg.get("INFLUX_TOKEN", "")
+    org = cfg.get("INFLUX_ORG", "mddp")
+    bucket = cfg.get("INFLUX_BUCKET", "musashi_telemetry")
+    measurement = cfg.get("INFLUX_MEASUREMENT", "musashi_iv_data")
+
+    write_url = f"{url}/api/v2/write?org={urllib.parse.quote(org)}&bucket={urllib.parse.quote(bucket)}&precision=s"
+    
+    fields = [
+        f"dis_press={float(rec.get('dis_press', 0.0))}",
+        f"dis_vacuum={float(rec.get('dis_vacuum', 0.0))}",
+        f"dis_time={float(rec.get('dis_time', 0.0))}",
+        f"shot_mode={int(rec.get('shot_mode', 0))}i",
+        f"watch_permit={float(rec.get('watch_permit', 100.0))}",
+        f"rsm_level={int(rec.get('rsm_level', 10))}i",
+        f"corr_vac={float(rec.get('corr_vac', 0.0))}"
+    ]
+    
+    ts_sec = int(time.time())
+    line_protocol = f"{measurement},ch_no={rec.get('ch_no', 1)} {','.join(fields)} {ts_sec}"
+    
+    headers = {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Accept": "application/json"
+    }
+    if token:
+        headers["Authorization"] = f"Token {token}"
+        
+    req = urllib.request.Request(write_url, data=line_protocol.encode('utf-8'), headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=3.0) as resp:
+        if resp.status not in (200, 204):
+            raise Exception(f"InfluxDB returned status {resp.status}")
 
 def generate_mock_payload(ch_no=1):
     t = time.time()
@@ -230,17 +309,30 @@ def run_ingestion():
     api_url = cfg.get("API_URL", "http://172.16.48.198:1025/v1/info/channel/data/1")
     interval = float(cfg.get("TIME_INTERVAL", 1.0))
     mock_mode = cfg.get("MOCKUP_MODE", True)
-    dsn = cfg.get("MOCKUP_DB_DSN") if mock_mode else cfg.get("DB_DSN")
+    db_type = cfg.get("DB_TYPE", "postgresql")
 
-    log.info(f"Starting Musashi IV Ingestion Pipeline | API_URL={api_url} | Interval={interval}s | Mockup={mock_mode}")
+    log.info(f"Starting Musashi IV Ingestion Pipeline | API_URL={api_url} | Interval={interval}s | DB_Type={db_type} | Mockup={mock_mode}")
 
     db_conn = None
-    try:
-        db_conn = get_db_connection(dsn)
-        init_db_schema(db_conn)
-        log.info("Database initialized successfully.")
-    except Exception as e:
-        log.warning(f"Database connection warning: {e}. Pipeline will continue and log records.")
+    sqlite_conn = None
+
+    if db_type == "postgresql":
+        dsn = cfg.get("MOCKUP_DB_DSN") if mock_mode else cfg.get("DB_DSN")
+        try:
+            db_conn = get_db_connection(dsn)
+            init_db_schema(db_conn)
+            log.info("PostgreSQL database initialized successfully.")
+        except Exception as e:
+            log.warning(f"PostgreSQL connection warning: {e}. Pipeline will continue and log records.")
+    elif db_type == "sqlite":
+        sqlite_path = cfg.get("SQLITE_PATH", "musashi_iv.db")
+        try:
+            sqlite_conn = init_sqlite_db(sqlite_path)
+            log.info(f"SQLite database ({sqlite_path}) initialized successfully.")
+        except Exception as e:
+            log.warning(f"SQLite initialization warning: {e}")
+    elif db_type == "influxdb":
+        log.info(f"InfluxDB target configured: {cfg.get('INFLUX_URL')} (Org: {cfg.get('INFLUX_ORG')}, Bucket: {cfg.get('INFLUX_BUCKET')})")
 
     polled = 0
     written = 0
@@ -255,7 +347,6 @@ def run_ingestion():
     signal.signal(signal.SIGINT, sig_handler)
     signal.signal(signal.SIGTERM, sig_handler)
 
-    # Windows: SIGBREAK fires on console close / taskkill without /f
     if sys.platform == "win32":
         signal.signal(signal.SIGBREAK, sig_handler)
 
@@ -267,7 +358,6 @@ def run_ingestion():
         polled += 1
         raw_payload = None
 
-        # Fetch data from API or fall back to mock payload if mock mode is active
         res = fetch_channel_data(api_url, timeout=3.0)
         if res["success"]:
             raw_payload = res["data"]
@@ -281,19 +371,35 @@ def run_ingestion():
         if raw_payload:
             try:
                 rec = format_channel_data(raw_payload, timestamp=now_ts)
-                if db_conn:
+                
+                if db_type == "postgresql":
+                    if db_conn:
+                        try:
+                            insert_record(db_conn, rec)
+                            written += 1
+                        except Exception as e:
+                            log.error(f"PostgreSQL Insert error: {e}")
+                            errors += 1
+                    else:
+                        written += 1
+                elif db_type == "sqlite":
+                    if sqlite_conn:
+                        try:
+                            insert_record_sqlite(sqlite_conn, rec)
+                            written += 1
+                        except Exception as e:
+                            log.error(f"SQLite Insert error: {e}")
+                            errors += 1
+                    else:
+                        written += 1
+                elif db_type == "influxdb":
                     try:
-                        insert_record(db_conn, rec)
+                        insert_record_influx(cfg, rec)
                         written += 1
                     except Exception as e:
-                        log.error(f"DB Insert error: {e}")
+                        log.error(f"InfluxDB Insert error: {e}")
                         errors += 1
-                        try:
-                            db_conn = get_db_connection(dsn)
-                        except Exception:
-                            pass
                 else:
-                    # Log write when DB is offline
                     written += 1
 
                 last_press = rec["dis_press"]
@@ -303,7 +409,6 @@ def run_ingestion():
                 log.error(f"Formatting error: {e}")
                 errors += 1
 
-        # Emit periodic stats line
         if time.time() - last_stats_time >= cfg.get("STATS_INTERVAL_SEC", 5):
             last_stats_time = time.time()
             log.info(
@@ -318,6 +423,9 @@ def run_ingestion():
 
     if db_conn:
         try: db_conn.close()
+        except: pass
+    if sqlite_conn:
+        try: sqlite_conn.close()
         except: pass
     log.info("Musashi IV Ingestion Pipeline stopped.")
 

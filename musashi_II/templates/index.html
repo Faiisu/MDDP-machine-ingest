@@ -139,21 +139,17 @@
 
                     <!-- Database Target Settings -->
                     <div class="section-divider-title">DATABASE TARGET CONFIGURATION</div>
-                    <div class="form-row">
-                        <div class="form-group flex-1">
-                            <label for="DB_TYPE">Database Engine</label>
-                            <select id="DB_TYPE" name="DB_TYPE" class="custom-select">
-                                <option value="postgresql">PostgreSQL / TimescaleDB</option>
-                                <option value="sqlite">SQLite (Local File)</option>
-                            </select>
-                        </div>
-                        <div class="form-group flex-2">
-                            <label for="DB_NAME">Database Name / Path</label>
-                            <input type="text" id="DB_NAME" name="DB_NAME" required placeholder="mddp_lab or musashi_data.db">
-                        </div>
+                    <div class="form-group">
+                        <label for="DB_TYPE">Database Engine Target</label>
+                        <select id="DB_TYPE" name="DB_TYPE" class="custom-select">
+                            <option value="postgresql">PostgreSQL / TimescaleDB (Relational / Time-Series)</option>
+                            <option value="influxdb">InfluxDB 2.x / Cloud (Time-Series Metric Storage)</option>
+                            <option value="sqlite">SQLite (Local Embedded File)</option>
+                        </select>
                     </div>
 
-                    <div id="postgres-config-group">
+                    <!-- PostgreSQL Split Configuration Group -->
+                    <div id="postgres-config-group" class="db-group">
                         <div class="form-row">
                             <div class="form-group flex-2">
                                 <label for="DB_HOST">Host Address</label>
@@ -165,21 +161,64 @@
                             </div>
                         </div>
                         <div class="form-row">
-                            <div class="form-group">
+                            <div class="form-group flex-1">
+                                <label for="DB_NAME">Database Name</label>
+                                <input type="text" id="DB_NAME" name="DB_NAME" placeholder="mddp_lab">
+                            </div>
+                            <div class="form-group flex-1">
+                                <label for="DB_TABLE">Table Name</label>
+                                <input type="text" id="DB_TABLE" name="DB_TABLE" placeholder="musashi_telemetry">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group flex-1">
                                 <label for="DB_USER">Username</label>
                                 <input type="text" id="DB_USER" name="DB_USER" placeholder="admin">
                             </div>
-                            <div class="form-group">
+                            <div class="form-group flex-1">
                                 <label for="DB_PASSWORD">Password</label>
                                 <input type="password" id="DB_PASSWORD" name="DB_PASSWORD" placeholder="admin">
                             </div>
                         </div>
                     </div>
 
-                    <div class="form-row">
-                        <div class="form-group flex-1">
-                            <label for="DB_TABLE">Table Name</label>
-                            <input type="text" id="DB_TABLE" name="DB_TABLE" required value="musashi_telemetry">
+                    <!-- InfluxDB Split Configuration Group -->
+                    <div id="influx-config-group" class="db-group" style="display: none;">
+                        <div class="form-row">
+                            <div class="form-group flex-2">
+                                <label for="INFLUX_URL">InfluxDB Server URL</label>
+                                <input type="text" id="INFLUX_URL" name="INFLUX_URL" placeholder="http://localhost:8086">
+                            </div>
+                            <div class="form-group flex-1">
+                                <label for="INFLUX_ORG">Organization (Org)</label>
+                                <input type="text" id="INFLUX_ORG" name="INFLUX_ORG" placeholder="mddp">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group flex-1">
+                                <label for="INFLUX_BUCKET">Bucket Name</label>
+                                <input type="text" id="INFLUX_BUCKET" name="INFLUX_BUCKET" placeholder="musashi_telemetry">
+                            </div>
+                            <div class="form-group flex-1">
+                                <label for="INFLUX_MEASUREMENT">Measurement Name</label>
+                                <input type="text" id="INFLUX_MEASUREMENT" name="INFLUX_MEASUREMENT" placeholder="musashi_telemetry">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group flex-2">
+                                <label for="INFLUX_TOKEN">API Authentication Token</label>
+                                <input type="password" id="INFLUX_TOKEN" name="INFLUX_TOKEN" placeholder="Token my-influxdb-token">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SQLite Split Configuration Group -->
+                    <div id="sqlite-config-group" class="db-group" style="display: none;">
+                        <div class="form-row">
+                            <div class="form-group flex-2">
+                                <label for="SQLITE_PATH">SQLite Database File Path</label>
+                                <input type="text" id="SQLITE_PATH" name="SQLITE_PATH" placeholder="musashi_data.db">
+                            </div>
                         </div>
                     </div>
 

@@ -96,11 +96,17 @@ class DatabaseHandler:
                 logger.info(f"Connected to MySQL database: {self.db_name} at {self.config.get('host')}")
             except ImportError:
                 raise ImportError("mysql-connector-python package is required for MySQL connections.")
+        elif self.db_type == "influxdb":
+            logger.info("Configured InfluxDB destination.")
+            self.conn = None
         else:
             raise ValueError(f"Unsupported database type: {self.db_type}")
 
     def init_db(self):
         """Creates the target table if it does not already exist."""
+        if self.db_type == "influxdb":
+            return
+            
         cursor = self.conn.cursor()
         
         if self.db_type == "sqlite":
@@ -167,6 +173,9 @@ class DatabaseHandler:
         :param data: Dictionary containing telemetry parameters from MusashiDispenser
         :return: Inserted record ID or boolean success
         """
+        if self.db_type == "influxdb":
+            return self._insert_influx(data)
+
         now_dt = datetime.datetime.now(datetime.timezone.utc)
         if self.db_type == "sqlite":
             db_timestamp = now_dt.isoformat(" ")
@@ -236,6 +245,41 @@ class DatabaseHandler:
             cursor.close()
             logger.info(f"Inserted record into '{self.table_name}' after auto-creation at {now_dt}")
             return last_row_id
+
+    def _insert_influx(self, data):
+        import time
+        import urllib.request
+        import urllib.parse
+        url = self.config.get("influx_url", "http://localhost:8086").rstrip('/')
+        token = self.config.get("influx_token", "")
+        org = self.config.get("influx_org", "mddp")
+        bucket = self.config.get("influx_bucket", "musashi_telemetry")
+        measurement = self.config.get("influx_measurement", self.table_name)
+
+        write_url = f"{url}/api/v2/write?org={urllib.parse.quote(org)}&bucket={urllib.parse.quote(bucket)}&precision=s"
+        fields = [
+            f"pressure_kpa={float(data.get('pressure_kpa', 0.0))}",
+            f"pressure_raw={int(data.get('pressure_raw', 0))}i",
+            f"time_ms={int(data.get('time_ms', 0))}i",
+            f"time_sec={float(data.get('time_sec', 0.0))}",
+            f"vacuum_kpa={float(data.get('vacuum_kpa', 0.0))}",
+            f"mode_code={int(data.get('mode_code', 0))}i"
+        ]
+        ts_sec = int(time.time())
+        line_protocol = f"{measurement},channel={data.get('channel', 1)} {','.join(fields)} {ts_sec}"
+
+        headers = {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Accept": "application/json"
+        }
+        if token:
+            headers["Authorization"] = f"Token {token}"
+
+        req = urllib.request.Request(write_url, data=line_protocol.encode('utf-8'), headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=3.0) as resp:
+            if resp.status not in (200, 204):
+                raise Exception(f"InfluxDB HTTP status {resp.status}")
+        return True
 
     def close(self):
         """Closes the database connection cleanly."""
