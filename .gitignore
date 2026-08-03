@@ -9,10 +9,16 @@ __pycache__/
 USB4716/.daq_process.pid
 USB4716/.daq_process.mode
 USB4716/daq_pipeline.log
+USB4716/.daq_desired_state.json
 musashi_II/.musashi_ii_process.pid
 musashi_II/.musashi_ii_process.mode
 musashi_II/.musashi_ii_desired_state.json
 musashi_II/musashi_ii_pipeline.log
+mushashi_IV/.musashi_desired_state.json
+mushashi_IV/.musashi_iv_process.pid
+mushashi_IV/.musashi_iv_process.mode
+mushashi_IV/musashi_iv_pipeline.log
+*.log
 *.db
 venv/
 .venv/

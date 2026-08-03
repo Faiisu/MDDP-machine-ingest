@@ -489,11 +489,17 @@ if pid is not None:
     print(f"[SYSTEM] Detected active background process running (PID: {pid}). Re-attaching...")
     start_tailing()
 else:
+    cfg = read_config()
     desired_state = read_desired_state()
-    if desired_state.get('is_running', False):
-        saved_mode = desired_state.get('mode', 'mockup')
-        print(f"[SYSTEM] Device restart detected! Auto-resuming DAQ ingestion in MODE={saved_mode.upper()}...")
-        handle_start({'mode': saved_mode})
+    auto_start_enabled = cfg.get('AUTO_START_ON_STARTUP', True)
+    is_desired_running = desired_state.get('is_running', False)
+    
+    if auto_start_enabled or is_desired_running:
+        target_mode = cfg.get('AUTO_START_MODE') or desired_state.get('mode', 'mockup')
+        print(f"[SYSTEM] Startup config AUTO_START_ON_STARTUP is enabled. Auto-starting DAQ ingestion in MODE={target_mode.upper()}...")
+        handle_start({'mode': target_mode})
+    else:
+        print("[SYSTEM] Startup config AUTO_START_ON_STARTUP is disabled. Awaiting manual start trigger.")
 
 if __name__ == '__main__':
     # Served on Port 8081

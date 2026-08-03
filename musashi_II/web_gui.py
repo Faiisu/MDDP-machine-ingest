@@ -526,11 +526,18 @@ if pid is not None:
     print(f"[SYSTEM] Detected active Musashi II process running (PID: {pid}). Re-attaching...")
     start_tailing()
 else:
+    cfg = read_config()
+    startup_cfg = cfg.get('startup', {})
+    auto_start_enabled = startup_cfg.get('auto_start_on_startup', cfg.get('AUTO_START_ON_STARTUP', True))
     desired_state = read_desired_state()
-    if desired_state.get('is_running', False):
-        saved_mode = desired_state.get('mode', 'mockup')
-        print(f"[SYSTEM] System reboot detected! Auto-resuming Musashi II ingestion in MODE={saved_mode.upper()}...")
-        handle_start({'mode': saved_mode})
+    is_desired_running = desired_state.get('is_running', False)
+    
+    if auto_start_enabled or is_desired_running:
+        target_mode = startup_cfg.get('auto_start_mode', cfg.get('AUTO_START_MODE')) or desired_state.get('mode', 'mockup')
+        print(f"[SYSTEM] Startup config auto_start_on_startup is enabled. Auto-starting Musashi II ingestion in MODE={target_mode.upper()}...")
+        handle_start({'mode': target_mode})
+    else:
+        print("[SYSTEM] Startup config auto_start_on_startup is disabled. Awaiting manual start trigger.")
 
 if __name__ == '__main__':
     # Served on Port 8082

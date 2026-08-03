@@ -85,6 +85,22 @@
                     <span class="panel-subtitle">Edit config.json parameters</span>
                 </div>
                 <form id="config-form" class="config-form">
+                    <!-- Startup & Automation Settings -->
+                    <div class="section-divider-title">STARTUP & AUTOMATION</div>
+                    <div class="form-row">
+                        <div class="form-group flex-2 checkbox-group">
+                            <input type="checkbox" id="AUTO_START_ON_STARTUP" name="AUTO_START_ON_STARTUP" class="custom-checkbox">
+                            <label for="AUTO_START_ON_STARTUP">Auto-start Ingestion Process on Application Startup</label>
+                        </div>
+                        <div class="form-group flex-1">
+                            <label for="AUTO_START_MODE">Startup Execution Mode</label>
+                            <select id="AUTO_START_MODE" name="AUTO_START_MODE" class="custom-select">
+                                <option value="mockup">Mockup Mode (Simulation)</option>
+                                <option value="real">Real Hardware (Serial Port)</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <!-- Serial Communication Section -->
                     <div class="section-divider-title">RS-232 HARDWARE & SERIAL PORT</div>
                     <div class="form-row">

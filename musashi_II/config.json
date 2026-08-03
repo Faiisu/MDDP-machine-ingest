@@ -1,8 +1,14 @@
 {
+  "startup": {
+    "auto_start_on_startup": true,
+    "auto_start_mode": "real"
+  },
+  "AUTO_START_ON_STARTUP": true,
+  "AUTO_START_MODE": "real",
   "serial": {
     "port": "/dev/cu.usbserial-A600bsZD",
     "baudrate": 9600,
-    "timeout": 2.0,
+    "timeout": 2,
     "channel": 1
   },
   "database": {
@@ -14,12 +20,12 @@
     "user": "admin",
     "password": "admin",
     "influx_url": "http://localhost:8086",
-    "influx_token": "my-influx-token",
     "influx_org": "mddp",
     "influx_bucket": "musashi_telemetry",
     "influx_measurement": "musashi_telemetry",
+    "influx_token": "my-influx-token",
     "sqlite_path": "musashi_data.db",
-    "description": "Database storage for MUSASHI Super ΣCMII Dispenser telemetry data"
+    "description": "Database storage for MUSASHI Super \u03a3CMII Dispenser telemetry data"
   },
   "acquisition": {
     "interval_time": 1,

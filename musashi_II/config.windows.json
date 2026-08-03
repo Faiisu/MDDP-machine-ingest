@@ -19,5 +19,9 @@
   "acquisition": {
     "interval_time": 1,
     "max_retries": 3
+  },
+  "startup": {
+    "auto_start_on_startup": true,
+    "auto_start_mode": "mockup"
   }
 }

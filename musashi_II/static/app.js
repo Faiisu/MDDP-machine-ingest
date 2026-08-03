@@ -118,6 +118,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (influxMeasurementInput) influxMeasurementInput.value = db.influx_measurement || 'musashi_telemetry';
             if (influxTokenInput) influxTokenInput.value = db.influx_token || '';
 
+            const startup = data.startup || {};
+            const autoStartCheck = document.getElementById('AUTO_START_ON_STARTUP');
+            const autoStartModeSelect = document.getElementById('AUTO_START_MODE');
+            if (autoStartCheck) autoStartCheck.checked = startup.auto_start_on_startup ?? data.AUTO_START_ON_STARTUP ?? true;
+            if (autoStartModeSelect) autoStartModeSelect.value = startup.auto_start_mode || data.AUTO_START_MODE || 'mockup';
+
             if (sqlitePathInput) sqlitePathInput.value = db.sqlite_path || 'musashi_data.db';
 
             updateDbFieldsVisibility();
@@ -130,7 +136,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Save Configuration to API
     configForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        const autoStartCheck = document.getElementById('AUTO_START_ON_STARTUP');
+        const autoStartModeSelect = document.getElementById('AUTO_START_MODE');
         const payload = {
+            startup: {
+                auto_start_on_startup: autoStartCheck ? autoStartCheck.checked : true,
+                auto_start_mode: autoStartModeSelect ? autoStartModeSelect.value : 'mockup'
+            },
+            AUTO_START_ON_STARTUP: autoStartCheck ? autoStartCheck.checked : true,
+            AUTO_START_MODE: autoStartModeSelect ? autoStartModeSelect.value : 'mockup',
             serial: {
                 port: serialPortInput.value.trim(),
                 baudrate: parseInt(serialBaudrate.value, 10),

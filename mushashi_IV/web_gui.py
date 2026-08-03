@@ -416,9 +416,16 @@ if __name__ == '__main__':
     if pid is not None:
         print(f"[SYSTEM] Detected active Musashi IV background process (PID: {pid}, Mode: {mode}).")
     else:
+        cfg = read_config()
         desired_state = read_desired_state()
-        if desired_state.get('is_running', False):
-            print("[SYSTEM] Device restart detected! Auto-resuming Musashi IV ingestion stream...")
-            with app.test_request_context():
+        auto_start_enabled = cfg.get('AUTO_START_ON_STARTUP', True)
+        is_desired_running = desired_state.get('is_running', False)
+        
+        if auto_start_enabled or is_desired_running:
+            target_mode = cfg.get('AUTO_START_MODE') or (desired_state.get('mode') if is_desired_running else None) or ('mockup' if cfg.get('MOCKUP_MODE', True) else 'real')
+            print(f"[SYSTEM] Startup config AUTO_START_ON_STARTUP is enabled. Auto-starting Musashi IV ingestion stream in MODE={target_mode.upper()}...")
+            with app.test_request_context(json={'mode': target_mode}):
                 start_process()
+        else:
+            print("[SYSTEM] Startup config AUTO_START_ON_STARTUP is disabled. Awaiting manual start trigger.")
     socketio.run(app, host='0.0.0.0', port=8083, debug=False)

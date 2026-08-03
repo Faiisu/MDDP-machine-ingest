@@ -262,6 +262,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (config.INFLUX_MEASUREMENT !== undefined) influxMeasurementInput.value = config.INFLUX_MEASUREMENT;
             if (config.INFLUX_TOKEN !== undefined) influxTokenInput.value = config.INFLUX_TOKEN;
 
+            const autoStartCheck = document.getElementById('AUTO_START_ON_STARTUP');
+            const autoStartModeSelect = document.getElementById('AUTO_START_MODE');
+            if (autoStartCheck && config.AUTO_START_ON_STARTUP !== undefined) autoStartCheck.checked = config.AUTO_START_ON_STARTUP;
+            else if (autoStartCheck) autoStartCheck.checked = true;
+            if (autoStartModeSelect && config.AUTO_START_MODE !== undefined) autoStartModeSelect.value = config.AUTO_START_MODE;
+
             if (config.SQLITE_PATH !== undefined) sqlitePathInput.value = config.SQLITE_PATH;
 
             updateDbTypeVisibility();
@@ -276,7 +282,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Form Submit (Save Config)
     configForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        const autoStartCheck = document.getElementById('AUTO_START_ON_STARTUP');
+        const autoStartModeSelect = document.getElementById('AUTO_START_MODE');
         const payload = {
+            AUTO_START_ON_STARTUP: autoStartCheck ? autoStartCheck.checked : true,
+            AUTO_START_MODE: autoStartModeSelect ? autoStartModeSelect.value : 'mockup',
             API_URL: apiUrlInput.value.trim(),
             TIME_INTERVAL: parseFloat(timeIntervalInput.value),
             CHANNEL_NO: parseInt(channelNoInput.value, 10),
