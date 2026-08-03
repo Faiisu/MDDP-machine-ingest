@@ -1,13 +1,44 @@
-2026-07-21 08:36:16,372 [INFO] Starting Musashi IV Ingestion Pipeline | API_URL=http://172.16.48.198:1025/v1/info/channel/data/1 | Interval=1.0s | Mockup=True
-2026-07-21 08:36:18,405 [ERROR] Database connection failed after 3 attempts: connection to server at "localhost" (::1), port 5432 failed: Connection refused
+2026-08-04 02:08:32,052 [INFO] Starting Musashi IV Ingestion Pipeline | API_URL=http://172.21.108.214:1025/v1/info/channel/data/1 | Interval=1.0s | DB_Type=postgresql | Mockup=True
+2026-08-04 02:08:32,120 [WARNING] Maintenance DB check/creation warning: connection to server at "localhost" (::1), port 5432 failed: Connection refused
 	Is the server running on that host and accepting TCP/IP connections?
 connection to server at "localhost" (127.0.0.1), port 5432 failed: Connection refused
 	Is the server running on that host and accepting TCP/IP connections?
 
-2026-07-21 08:36:18,405 [WARNING] Database connection warning: connection to server at "localhost" (::1), port 5432 failed: Connection refused
+2026-08-04 02:08:34,140 [ERROR] Database connection failed after 3 attempts: connection to server at "localhost" (::1), port 5432 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+connection to server at "localhost" (127.0.0.1), port 5432 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+
+2026-08-04 02:08:34,140 [WARNING] PostgreSQL connection warning: connection to server at "localhost" (::1), port 5432 failed: Connection refused
 	Is the server running on that host and accepting TCP/IP connections?
 connection to server at "localhost" (127.0.0.1), port 5432 failed: Connection refused
 	Is the server running on that host and accepting TCP/IP connections?
 . Pipeline will continue and log records.
-2026-07-21 08:36:21,208 [INFO] Termination signal received. Shutting down Musashi IV Ingestion Pipeline...
-2026-07-21 08:36:21,432 [INFO] Musashi IV Ingestion Pipeline stopped.
+2026-08-04 02:08:40,187 [INFO] [STATS] polled=2 | written=2 | db_errors=0 | last_press=40.12 | last_vac=0.05 | last_time=1.000
+2026-08-04 02:08:46,219 [INFO] [STATS] polled=4 | written=4 | db_errors=0 | last_press=42.50 | last_vac=0.04 | last_time=1.009
+2026-08-04 02:08:52,248 [INFO] [STATS] polled=6 | written=6 | db_errors=0 | last_press=41.75 | last_vac=0.02 | last_time=0.992
+2026-08-04 02:08:58,278 [INFO] [STATS] polled=8 | written=8 | db_errors=0 | last_press=38.83 | last_vac=0.00 | last_time=0.998
+2026-08-04 02:09:04,320 [INFO] [STATS] polled=10 | written=10 | db_errors=0 | last_press=37.64 | last_vac=0.00 | last_time=1.010
+2026-08-04 02:09:10,353 [INFO] [STATS] polled=12 | written=12 | db_errors=0 | last_press=39.44 | last_vac=0.00 | last_time=0.994
+2026-08-04 02:09:16,385 [INFO] [STATS] polled=14 | written=14 | db_errors=0 | last_press=41.94 | last_vac=0.00 | last_time=0.996
+2026-08-04 02:09:22,416 [INFO] [STATS] polled=16 | written=16 | db_errors=0 | last_press=42.19 | last_vac=0.00 | last_time=1.010
+2026-08-04 02:09:28,442 [INFO] [STATS] polled=18 | written=18 | db_errors=0 | last_press=39.48 | last_vac=0.01 | last_time=0.996
+2026-08-04 02:09:34,475 [INFO] [STATS] polled=20 | written=20 | db_errors=0 | last_press=37.53 | last_vac=0.03 | last_time=0.994
+2026-08-04 02:09:40,507 [INFO] [STATS] polled=22 | written=22 | db_errors=0 | last_press=38.87 | last_vac=0.05 | last_time=1.010
+2026-08-04 02:09:46,537 [INFO] [STATS] polled=24 | written=24 | db_errors=0 | last_press=41.55 | last_vac=0.05 | last_time=0.998
+2026-08-04 02:09:52,566 [INFO] [STATS] polled=26 | written=26 | db_errors=0 | last_press=42.36 | last_vac=0.03 | last_time=0.992
+2026-08-04 02:09:58,596 [INFO] [STATS] polled=28 | written=28 | db_errors=0 | last_press=40.17 | last_vac=0.00 | last_time=1.009
+2026-08-04 02:10:04,626 [INFO] [STATS] polled=30 | written=30 | db_errors=0 | last_press=37.78 | last_vac=0.00 | last_time=1.001
+2026-08-04 02:10:10,659 [INFO] [STATS] polled=32 | written=32 | db_errors=0 | last_press=38.38 | last_vac=0.00 | last_time=0.991
+2026-08-04 02:10:16,706 [INFO] [STATS] polled=34 | written=34 | db_errors=0 | last_press=41.26 | last_vac=0.00 | last_time=1.007
+2026-08-04 02:10:22,738 [INFO] [STATS] polled=36 | written=36 | db_errors=0 | last_press=42.61 | last_vac=0.00 | last_time=1.003
+2026-08-04 02:10:28,772 [INFO] [STATS] polled=38 | written=38 | db_errors=0 | last_press=40.64 | last_vac=0.00 | last_time=0.990
+2026-08-04 02:10:34,803 [INFO] [STATS] polled=40 | written=40 | db_errors=0 | last_press=38.03 | last_vac=0.02 | last_time=1.005
+2026-08-04 02:10:40,834 [INFO] [STATS] polled=42 | written=42 | db_errors=0 | last_press=38.11 | last_vac=0.04 | last_time=1.005
+2026-08-04 02:10:46,866 [INFO] [STATS] polled=44 | written=44 | db_errors=0 | last_press=40.56 | last_vac=0.05 | last_time=0.990
+2026-08-04 02:10:52,898 [INFO] [STATS] polled=46 | written=46 | db_errors=0 | last_press=42.29 | last_vac=0.04 | last_time=1.003
+2026-08-04 02:10:58,927 [INFO] [STATS] polled=48 | written=48 | db_errors=0 | last_press=41.39 | last_vac=0.01 | last_time=1.007
+2026-08-04 02:11:04,958 [INFO] [STATS] polled=50 | written=50 | db_errors=0 | last_press=38.21 | last_vac=0.00 | last_time=0.991
+2026-08-04 02:11:10,992 [INFO] [STATS] polled=52 | written=52 | db_errors=0 | last_press=37.59 | last_vac=0.00 | last_time=1.001
+2026-08-04 02:11:12,725 [INFO] Termination signal received. Shutting down Musashi IV Ingestion Pipeline...
+2026-08-04 02:11:14,016 [INFO] Musashi IV Ingestion Pipeline stopped.
