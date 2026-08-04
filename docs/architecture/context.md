@@ -12,7 +12,7 @@ graph TB
     TimescaleDB[("🗄️ TimescaleDB / Postgres")]
   end
   subgraph UI [Visualization Layer]
-    Plotter["📈 Matplotlib Plotter (plot_from_db.py)"]
+    Plotter["📈 Plotly.js Visualizer (services/plotter/app.py)"]
   end
 
   DAQ -->|Analog Signals| DAQ
@@ -21,4 +21,4 @@ graph TB
   TimescaleDB -->|SQL SELECT| Plotter
 ```
 
-**What this shows**: The physical DAQ hardware card (USB-4716) feeds analog signals which are read via the Advantech DAQNavi SDK by the Python streaming pipeline process (`stream_to_db.py`). The pipeline batch inserts rows into TimescaleDB, which is then queried by `plot_from_db.py` to display static or live data.
+**What this shows**: The physical DAQ hardware card (USB-4716) feeds analog signals which are read via the Advantech DAQNavi SDK by the Python streaming pipeline process (`stream_to_db.py`). The pipeline batch inserts rows into TimescaleDB, which is then queried by the visualizer service (`services/plotter/app.py`) to display live Plotly.js charts.

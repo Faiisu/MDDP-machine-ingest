@@ -14,8 +14,15 @@ import psycopg2.extras
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 
-# Resolve config.json path from the USB4716 directory
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', 'USB4716', 'config.json')
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from shared.config import load_config, resolve_db_dsn
+
+# Resolve config.json path from the daq_usb4716 directory
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', 'daq_usb4716', 'config.json')
+MODE_PATH = os.path.join(os.path.dirname(__file__), '..', 'daq_usb4716', '.daq_process.mode')
 
 def get_db_dsn():
     """
@@ -24,30 +31,8 @@ def get_db_dsn():
     returns the mockup connection string; otherwise returns the production DSN.
     """
     try:
-        with open(CONFIG_PATH, 'r') as f:
-            cfg = json.load(f)
-            
-        # Check active process mode from the DAQ control status file
-        mode_path = os.path.join(os.path.dirname(__file__), '..', 'USB4716', '.daq_process.mode')
-        active_mode = 'real'
-        if os.path.exists(mode_path):
-            with open(mode_path, 'r') as mf:
-                active_mode = mf.read().strip()
-                
-        if active_mode == 'mockup':
-            # Swap database name in MOCKUP_DB_DSN to target the mockup database
-            base_dsn = cfg.get("MOCKUP_DB_DSN", "postgresql://admin:admin@localhost:5432/daq_db")
-            if "/daq_db" in base_dsn:
-                return base_dsn.replace("/daq_db", "/mockup")
-            elif base_dsn.endswith("/"):
-                return base_dsn + "mockup"
-            else:
-                slash_idx = base_dsn.rfind('/')
-                if slash_idx != -1:
-                    return base_dsn[:slash_idx+1] + "mockup"
-            return base_dsn
-        else:
-            return cfg.get("DB_DSN")
+        cfg = load_config(CONFIG_PATH)
+        return resolve_db_dsn(cfg, MODE_PATH)
     except Exception as e:
         print(f"Error loading DSN: {e}")
         return "postgresql://admin:admin@172.21.108.86:5432/daq_db"

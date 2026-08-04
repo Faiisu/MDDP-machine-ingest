@@ -121,7 +121,7 @@ python -m unittest test_read_musashi.py -v
 ## File Structure
 
 ```
-musashi_II/
+musashi_ii/
 ├── read_musashi.py         # Main application (cross-platform)
 ├── database_handler.py     # Database operations (cross-platform)
 ├── config.json             # macOS/Linux config

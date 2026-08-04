@@ -4,7 +4,7 @@
 sequenceDiagram
     autonumber
     actor User
-    participant Plotter as plot_from_db.py
+    participant Plotter as services/plotter/app.py
     participant DBWriter as DB-Writer Thread
     participant Queue as data_queue (Queue)
     participant DAQReader as DAQ-Reader Thread

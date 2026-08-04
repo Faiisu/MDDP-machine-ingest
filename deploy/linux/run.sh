@@ -49,27 +49,27 @@ echo "=========================================================="
 
 # 1. Start Main Portal Gateway (Port 8080)
 echo "[SYSTEM] Starting Ingestion Portal on Port 8080 (all interfaces)..."
-nohup $PYTHON_BIN -m http.server 8080 --directory portal >/dev/null 2>&1 &
+nohup $PYTHON_BIN -m http.server 8080 --directory services/portal >/dev/null 2>&1 &
 echo $! > "$PORTAL_PID_FILE"
 
 # 2. Start DAQ USB-4716 Control Panel (Port 8081)
 echo "[SYSTEM] Starting DAQ Control Panel on Port 8081 (all interfaces)..."
-nohup $PYTHON_BIN USB4716/web_gui.py >/dev/null 2>&1 &
+nohup $PYTHON_BIN services/daq_usb4716/app.py >/dev/null 2>&1 &
 echo $! > "$DAQ_PID_FILE"
 
 # 3. Start Musashi II Control Panel (Port 8082)
 echo "[SYSTEM] Starting Musashi II Control Panel on Port 8082 (all interfaces)..."
-nohup $PYTHON_BIN musashi_II/web_gui.py >/dev/null 2>&1 &
+nohup $PYTHON_BIN services/musashi_ii/app.py >/dev/null 2>&1 &
 echo $! > "$MUSASHI_II_PID_FILE"
 
 # 4. Start Musashi IV Control Panel (Port 8083)
 echo "[SYSTEM] Starting Musashi IV Control Panel on Port 8083 (all interfaces)..."
-nohup $PYTHON_BIN mushashi_IV/web_gui.py >/dev/null 2>&1 &
+nohup $PYTHON_BIN services/musashi_iv/app.py >/dev/null 2>&1 &
 echo $! > "$MUSASHI_IV_PID_FILE"
 
 # 5. Start Database Plotter (Port 8084)
 echo "[SYSTEM] Starting Database Plotter on Port 8084 (all interfaces)..."
-nohup $PYTHON_BIN plot_service/app.py >/dev/null 2>&1 &
+nohup $PYTHON_BIN services/plotter/app.py >/dev/null 2>&1 &
 echo $! > "$PLOTTER_PID_FILE"
 
 echo "[SYSTEM] Services launched in background."

@@ -180,7 +180,7 @@ See [DEPLOY_WINDOWS.md](DEPLOY_WINDOWS.md) for complete details on Windows Task 
 
 ## 4. Configuration Documentation
 
-The hardware interface, database connection parameters, and calibration parameters are configured via [USB4716/config.json](file:///Users/faiisu/projects.nosync/DAQ-USB-4716/USB4716/config.json).
+The hardware interface, database connection parameters, and calibration parameters are configured via [services/daq_usb4716/config.json](services/daq_usb4716/config.json).
 
 ### Output Destination & MQTT Parameters
 | Parameter | Default Value | Description |
@@ -239,32 +239,27 @@ When `DESTINATION` is set to `mqtt`, the DAQ streaming pipeline publishes JSON t
 ### Standalone MQTT-to-DB Subscriber
 To consume telemetry from the MQTT broker and persist it into TimescaleDB:
 ```bash
-uv run USB4716/mqtt_to_db.py
+uv run services/daq_usb4716/mqtt_to_db.py
 ```
 
 ---
 
 ## 6. Project Structure
 
-- `deploy/`: Dedicated platform deployment assets.
-  - `linux/`: Linux shell scripts (`install_deps.sh`, `run.sh`, `stop.sh`), systemd installer (`setup_systemd.sh`), and unit file (`mddp.service`).
-  - `windows/`: Windows batch scripts (`install_deps.bat`, `run.bat`, `stop.bat`), Task Scheduler installers (`setup_task_scheduler.ps1`), and `watchdog.ps1`.
-- `portal/`: Portal Gateway static site files.
-  - [index.html](file:///Users/faiisu/projects.nosync/DAQ-USB-4716/portal/index.html): Central gateway cockpit web layout.
-  - [app.js](file:///Users/faiisu/projects.nosync/DAQ-USB-4716/portal/app.js): Port heartbeat and uptime trackers.
-- `USB4716/`: DAQ Controller daemon files.
-  - [web_gui.py](file:///Users/faiisu/projects.nosync/DAQ-USB-4716/USB4716/web_gui.py): Controls python daemon cycles and streams stdout logs to client websockets.
-  - [stream_to_db.py](file:///Users/faiisu/projects.nosync/DAQ-USB-4716/USB4716/stream_to_db.py): High-throughput hardware thread loop accessing Advantech library calls.
-  - [mockup_stream_to_db.py](file:///Users/faiisu/projects.nosync/DAQ-USB-4716/USB4716/mockup_stream_to_db.py): Hardware-free mockup utility supporting DB and MQTT output.
-  - [mqtt_to_db.py](file:///Users/faiisu/projects.nosync/DAQ-USB-4716/USB4716/mqtt_to_db.py): Standalone MQTT subscriber daemon bridging MQTT broker messages into TimescaleDB.
-- `plot_service/`: Telemetry Visualizer web application files.
-  - [app.py](file:///Users/faiisu/projects.nosync/DAQ-USB-4716/plot_service/app.py): REST API endpoints for connection testing and TimescaleDB querying.
-  - `static/`: Frontend visual layout mapping Plotly grid resizing.
-- `docs/`: Design systems documentation, diagrams, ERD, and context definitions.
+- `services/`: Unified microservices folder.
+  - `portal/`: Portal Gateway static site files (`index.html`, `app.js`, `style.css`).
+  - `daq_usb4716/`: DAQ Controller daemon files (`app.py`, `stream_to_db.py`, `mockup_stream_to_db.py`, `mqtt_to_db.py`).
+  - `musashi_ii/`: Musashi II Dispenser Controller service (`app.py`, `read_musashi.py`, `database_handler.py`).
+  - `musashi_iv/`: Musashi IV Dispenser Controller service (`app.py`, `stream_to_db.py`, `api_client.py`).
+  - `plotter/`: Database Telemetry Visualizer service (`app.py`, static asset grid layout).
+- `shared/`: Shared Python utilities (`config.py`, `db.py`, `process_manager.py`).
+- `scripts/`: System scripts and SQL definitions (`scripts/sql/db_setup.sql`).
+- `deploy/`: Platform deployment runners for Linux and Windows (`deploy/linux/`, `deploy/windows/`).
+- `docs/`: Design system specifications, diagrams, and architecture reference files.
 
 ---
 
-## 6. Troubleshooting Tips
+## 7. Troubleshooting Tips
 
 ### ⚠️ Common Issue: Port Conflict
 - **Symptom**: `[SYSTEM] Warning: PID files detected` or failed socket binding warnings during startup.

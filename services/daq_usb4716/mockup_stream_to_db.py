@@ -200,7 +200,7 @@ def ensure_mockup_db():
                 ON daq_samples (channel, time DESC);
         """)
 
-        # Session metadata table (mirrors db_setup.sql)
+        # Session metadata table (mirrors scripts/sql/db_setup.sql)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS daq_sessions (
                 id            SERIAL PRIMARY KEY,

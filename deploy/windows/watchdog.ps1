@@ -15,7 +15,7 @@ function Write-Log($message) {
     "$timestamp $message" | Out-File -FilePath $LogFile -Append -Encoding utf8
 }
 
-$Ports = @(8080, 8081, 8083, 8084)
+$Ports = @(8080, 8081, 8082, 8083, 8084)
 $DownPorts = @()
 
 foreach ($port in $Ports) {

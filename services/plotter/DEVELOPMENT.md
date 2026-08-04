@@ -108,14 +108,14 @@ def get_musashi_data():
 ```
 
 ### Step 3: Add UI Option in Modal Form
-Add option in [plot_service/templates/index.html](file:///Users/faiisu/projects.nosync/DAQ-USB-4716/plot_service/templates/index.html) under `<select id="modal-service-select">`:
+Add option in [services/plotter/templates/index.html](file:///Users/faiisu/projects.nosync/DAQ-USB-4716/services/plotter/templates/index.html) under `<select id="modal-service-select">`:
 
 ```html
 <option value="musashi_ii">Musashi II Dispenser</option>
 ```
 
 ### Step 4: Map Visual Layouts in `app.js`
-Modify `initPlotlyChart` and `queryPlotData` in [plot_service/static/app.js](file:///Users/faiisu/projects.nosync/DAQ-USB-4716/plot_service/static/app.js) to dynamically configure line styling and parse endpoints:
+Modify `initPlotlyChart` and `queryPlotData` in [services/plotter/static/app.js](file:///Users/faiisu/projects.nosync/DAQ-USB-4716/services/plotter/static/app.js) to dynamically configure line styling and parse endpoints:
 
 ```javascript
 // Add in static/app.js

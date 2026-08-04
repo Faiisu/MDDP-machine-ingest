@@ -79,6 +79,7 @@ Launch the MDDP application suite in background mode:
 [SYSTEM] Using Python interpreter: .venv/bin/python
 [SYSTEM] Starting Ingestion Portal on Port 8080 (all interfaces)...
 [SYSTEM] Starting DAQ Control Panel on Port 8081 (all interfaces)...
+[SYSTEM] Starting Musashi II Control Panel on Port 8082 (all interfaces)...
 [SYSTEM] Starting Musashi IV Control Panel on Port 8083 (all interfaces)...
 [SYSTEM] Starting Database Plotter on Port 8084 (all interfaces)...
 [SYSTEM] Services launched in background.
@@ -156,12 +157,13 @@ Once launched, access the web microservices via your browser:
 | :--- | :--- | :--- |
 | **Portal Gateway** | `8080` | [http://localhost:8080](http://localhost:8080) |
 | **DAQ USB-4716 Panel** | `8081` | [http://localhost:8081](http://localhost:8081) |
+| **Musashi II Panel** | `8082` | [http://localhost:8082](http://localhost:8082) |
 | **Musashi IV Panel** | `8083` | [http://localhost:8083](http://localhost:8083) |
 | **Database Plotter** | `8084` | [http://localhost:8084](http://localhost:8084) |
 
 Verify active listening ports:
 ```bash
-lsof -i :8080 -i :8081 -i :8083 -i :8084
+lsof -i :8080 -i :8081 -i :8082 -i :8083 -i :8084
 ```
 
 ---
@@ -170,7 +172,7 @@ lsof -i :8080 -i :8081 -i :8083 -i :8084
 
 Service processes write background logs or output to stdout/stderr. To monitor individual process log files:
 ```bash
-tail -f USB4716/daq_pipeline.log
+tail -f services/daq_usb4716/daq_pipeline.log
 ```
 
 ---
