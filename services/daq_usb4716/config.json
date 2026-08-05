@@ -1,14 +1,19 @@
 {
-  "AUTO_START_ON_STARTUP": true,
-  "AUTO_START_MODE": "real",
+  "AUTO_START_ON_STARTUP": false,
+  "AUTO_START_MODE": "mockup",
   "DEVICE_DESCRIPTION": "USB-4716,BID#0",
   "PROFILE_PATH": "./profile.xml",
   "START_CHANNEL": 0,
-  "CHANNEL_COUNT": 1,
+  "CHANNEL_COUNT": 8,
   "CLOCK_RATE": 2000,
   "SECTION_LENGTH": 500,
   "SECTION_COUNT": 0,
   "QUEUE_MAXSIZE": 200,
+  "ENABLE_AI": true,
+  "ENABLE_DI": true,
+  "DI_START_PORT": 0,
+  "DI_PORT_COUNT": 1,
+  "DI_CHANNEL_OFFSET": 100,
   "DESTINATION": "postgresql",
   "DB_HOST": "172.21.108.86",
   "DB_PORT": "5432",
@@ -38,59 +43,59 @@
   "SCALE_CONFIGS": {
     "0": {
       "enabled": true,
-      "low_voltage": 1,
-      "high_voltage": 5,
-      "low_value": -100,
-      "high_value": 100
+      "low_voltage": 0.0,
+      "high_voltage": 5.0,
+      "low_value": -50.0,
+      "high_value": 50.0
     },
     "1": {
       "enabled": false,
-      "high_value": 100,
+      "low_voltage": 0,
       "high_voltage": 10,
       "low_value": 0,
-      "low_voltage": 0
+      "high_value": 100
     },
     "2": {
       "enabled": false,
-      "high_value": 100,
+      "low_voltage": 0,
       "high_voltage": 10,
       "low_value": 0,
-      "low_voltage": 0
+      "high_value": 100
     },
     "3": {
       "enabled": false,
-      "high_value": 100,
+      "low_voltage": 0,
       "high_voltage": 10,
       "low_value": 0,
-      "low_voltage": 0
+      "high_value": 100
     },
     "4": {
       "enabled": false,
-      "high_value": 100,
+      "low_voltage": 0,
       "high_voltage": 10,
       "low_value": 0,
-      "low_voltage": 0
+      "high_value": 100
     },
     "5": {
       "enabled": false,
-      "high_value": 100,
+      "low_voltage": 0,
       "high_voltage": 10,
       "low_value": 0,
-      "low_voltage": 0
+      "high_value": 100
     },
     "6": {
       "enabled": false,
-      "high_value": 100,
+      "low_voltage": 0,
       "high_voltage": 10,
       "low_value": 0,
-      "low_voltage": 0
+      "high_value": 100
     },
     "7": {
       "enabled": false,
-      "high_value": 100,
+      "low_voltage": 0,
       "high_voltage": 10,
       "low_value": 0,
-      "low_voltage": 0
+      "high_value": 100
     }
   }
 }

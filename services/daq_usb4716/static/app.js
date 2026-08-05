@@ -21,9 +21,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('config-form');
     form.addEventListener('submit', handleConfigSave);
 
-    // Setup scaling toggle, destination toggle, and target channel listeners
-    document.getElementById('SCALE_ENABLED').addEventListener('change', toggleScalingFields);
-    document.getElementById('SCALE_CHANNEL_TARGET').addEventListener('change', handleScaleChannelTargetChange);
+    // Setup Sidebar Tab Navigation
+    const sidebarBtns = document.querySelectorAll('#sidebar-tab-list .nav-tab-btn');
+    sidebarBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            sidebarBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const panelId = btn.dataset.panel;
+            document.querySelectorAll('.workspace-panel').forEach(panel => {
+                panel.classList.toggle('hidden', panel.id !== panelId);
+            });
+        });
+    });
+
+    // Setup destination toggle, TLS toggle, and sampling field listeners
     const destEl = document.getElementById('DESTINATION');
     if (destEl) {
         destEl.addEventListener('change', toggleDestinationFields);
@@ -32,12 +43,33 @@ document.addEventListener('DOMContentLoaded', () => {
     if (tlsEl) {
         tlsEl.addEventListener('change', toggleTlsFields);
     }
+    document.getElementById('ENABLE_AI')?.addEventListener('change', () => { toggleSamplingFields(); updateDataSizeEstimator(); checkDirtyState(); });
+    document.getElementById('ENABLE_DI')?.addEventListener('change', () => { toggleSamplingFields(); updateDataSizeEstimator(); checkDirtyState(); });
+    document.getElementById('CLOCK_RATE')?.addEventListener('input', () => { updateDataSizeEstimator(); checkDirtyState(); });
+
+    // Track input & change events for real-time unsaved changes detection
+    const configForm = document.getElementById('config-form');
+    if (configForm) {
+        configForm.addEventListener('input', checkDirtyState);
+        configForm.addEventListener('change', checkDirtyState);
+    }
 
     // Setup action buttons
     document.getElementById('start-btn').addEventListener('click', handleStartProcess);
     document.getElementById('stop-btn').addEventListener('click', handleStopProcess);
     document.getElementById('clear-console-btn').addEventListener('click', clearConsole);
     
+    // Setup Confirm Audit Modal Listeners
+    document.getElementById('modal-close-btn')?.addEventListener('click', closeConfirmAuditModal);
+    document.getElementById('btn-cancel-save')?.addEventListener('click', closeConfirmAuditModal);
+    document.getElementById('btn-confirm-save')?.addEventListener('click', commitConfigToBackend);
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeConfirmAuditModal();
+        }
+    });
+
     const scanBtn = document.getElementById('btn-scan-usb');
     if (scanBtn) {
         scanBtn.addEventListener('click', handleScanUsbDevices);
@@ -218,6 +250,26 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+// Toggle sampling fields according to ENABLE_AI and ENABLE_DI checkboxes
+function toggleSamplingFields() {
+    const aiEl = document.getElementById('ENABLE_AI');
+    const diEl = document.getElementById('ENABLE_DI');
+    const aiChecked = aiEl ? aiEl.checked : true;
+    const diChecked = diEl ? diEl.checked : true;
+
+    const aiFields = document.getElementById('ai-sampling-fields');
+    const diFields = document.getElementById('di-sampling-fields');
+
+    if (aiFields) {
+        aiFields.style.opacity = aiChecked ? '1' : '0.4';
+        aiFields.querySelectorAll('input').forEach(i => i.disabled = !aiChecked);
+    }
+    if (diFields) {
+        diFields.style.opacity = diChecked ? '1' : '0.4';
+        diFields.querySelectorAll('input').forEach(i => i.disabled = !diChecked);
+    }
+}
+
 // Toggle visibility of TLS certificate fields
 function toggleTlsFields() {
     const tlsChecked = document.getElementById('MQTT_TLS_ENABLED')?.checked || false;
@@ -257,17 +309,88 @@ async function loadConfig() {
             }
         });
         
-        // Store per-channel scale configurations
+        // Store active server baseline configuration
+        activeServerConfig = JSON.parse(JSON.stringify(config));
+
+        // Store per-channel scale configurations & render matrix table
         scaleConfigs = config.SCALE_CONFIGS || {};
-        currentScaleChannel = document.getElementById('SCALE_CHANNEL_TARGET').value || '0';
-        loadScaleChannelToInputs(currentScaleChannel);
+        renderIngestionMatrixTable(config);
         toggleDestinationFields();
         toggleTlsFields();
+        toggleSamplingFields();
+        updateDataSizeEstimator();
+        checkDirtyState();
         
         appendLog('INFO', 'System configuration loaded from config.json.');
     } catch (e) {
         appendLog('ERROR', `Failed to load config: ${e.message}`);
     }
+}
+
+// Check if current form/matrix values differ from active server baseline config
+function checkDirtyState() {
+    const form = document.getElementById('config-form');
+    if (!form || !activeServerConfig || Object.keys(activeServerConfig).length === 0) return false;
+
+    const matrixScales = collectScaleConfigsFromMatrixTable();
+    const inputs = form.querySelectorAll('input[name], select[name]');
+    let isDirty = false;
+
+    for (let el of inputs) {
+        if (!el.name) continue;
+        const oldVal = activeServerConfig[el.name];
+        let newVal;
+        if (el.type === 'checkbox') {
+            newVal = el.checked;
+        } else if (el.name === 'ANCHOR_RECALIBRATE_INTERVAL_HR') {
+            newVal = parseFloat(el.value);
+        } else if (['START_CHANNEL', 'CHANNEL_COUNT', 'CLOCK_RATE', 'SECTION_LENGTH', 'SECTION_COUNT', 'QUEUE_MAXSIZE', 'DB_PAGE_SIZE', 'STATS_INTERVAL_SEC', 'MQTT_PORT', 'MQTT_QOS', 'DI_START_PORT', 'DI_PORT_COUNT', 'DI_CHANNEL_OFFSET'].includes(el.name)) {
+            newVal = parseInt(el.value, 10);
+        } else {
+            newVal = el.value;
+        }
+
+        if (oldVal !== undefined && String(oldVal) !== String(newVal)) {
+            isDirty = true;
+            break;
+        }
+    }
+
+    // Check scale configs
+    if (!isDirty && activeServerConfig.SCALE_CONFIGS) {
+        const oldScales = activeServerConfig.SCALE_CONFIGS;
+        for (let ch of Object.keys(matrixScales)) {
+            const oldCh = oldScales[ch] || {};
+            const newCh = matrixScales[ch] || {};
+            for (let f of ['enabled', 'low_voltage', 'high_voltage', 'low_value', 'high_value']) {
+                if (oldCh[f] !== undefined && String(oldCh[f]) !== String(newCh[f])) {
+                    isDirty = true;
+                    break;
+                }
+            }
+            if (isDirty) break;
+        }
+    }
+
+    // Update save status badges according to dirty state
+    document.querySelectorAll('.save-status-badge').forEach(badge => {
+        const textEl = badge.querySelector('.save-status-text');
+        if (isDirty) {
+            badge.classList.add('badge-warning');
+            badge.classList.remove('hidden');
+            if (textEl) textEl.textContent = '⚠️ UNSAVED CHANGES';
+        } else {
+            badge.classList.remove('badge-warning');
+            if (badge.dataset.savedTime) {
+                if (textEl) textEl.textContent = badge.dataset.savedTime;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+    });
+
+    return isDirty;
 }
 
 // Check if a process is already running on page load
@@ -317,25 +440,27 @@ function updateUIState(running, mode = 'mockup', destination = 'database') {
     }
 }
 
-// Intercept form submissions and update JSON configuration on the server
+// Intercept form submissions and open Tactical Config Audit Modal
 async function handleConfigSave(e) {
     e.preventDefault();
     
-    // Save current active scaling inputs first
-    saveInputsToScaleChannel(currentScaleChannel);
+    // Collect matrix table scale configurations & sampling parameters
+    const matrixScales = collectScaleConfigsFromMatrixTable();
+    updateGlobalSamplingFromTable();
+    
+    const form = document.getElementById('config-form');
+    const inputs = form ? form.querySelectorAll('input[name], select[name]') : document.querySelectorAll('input[name], select[name]');
     
     const configData = {};
-    const elements = e.target.elements;
-    
     // Parse form fields manually to support checkboxes, integers, and custom keys
-    for (let el of elements) {
-        if (!el.name) continue; // Excludes channel-specific scaling inputs without name attrs
+    for (let el of inputs) {
+        if (!el.name) continue;
         
         if (el.type === 'checkbox') {
             configData[el.name] = el.checked;
         } else if (el.name === 'ANCHOR_RECALIBRATE_INTERVAL_HR') {
             configData[el.name] = parseFloat(el.value);
-        } else if (['START_CHANNEL', 'CHANNEL_COUNT', 'CLOCK_RATE', 'SECTION_LENGTH', 'SECTION_COUNT', 'QUEUE_MAXSIZE', 'DB_PAGE_SIZE', 'STATS_INTERVAL_SEC', 'MQTT_PORT', 'MQTT_QOS'].includes(el.name)) {
+        } else if (['START_CHANNEL', 'CHANNEL_COUNT', 'CLOCK_RATE', 'SECTION_LENGTH', 'SECTION_COUNT', 'QUEUE_MAXSIZE', 'DB_PAGE_SIZE', 'STATS_INTERVAL_SEC', 'MQTT_PORT', 'MQTT_QOS', 'DI_START_PORT', 'DI_PORT_COUNT', 'DI_CHANNEL_OFFSET'].includes(el.name)) {
             configData[el.name] = parseInt(el.value, 10);
         } else {
             configData[el.name] = el.value;
@@ -343,18 +468,120 @@ async function handleConfigSave(e) {
     }
 
     // Inject scaling configs dictionary
-    configData['SCALE_CONFIGS'] = scaleConfigs;
+    configData['SCALE_CONFIGS'] = matrixScales;
+
+    // Present Audit & Confirmation Modal
+    openConfirmAuditModal(configData);
+}
+
+// Compute diff and present Tactical Configuration Audit Modal
+function openConfirmAuditModal(newConfig) {
+    pendingConfigPayload = newConfig;
+    const diffContainer = document.getElementById('diff-list-container');
+    const countBadge = document.getElementById('diff-count-badge');
+    if (!diffContainer) return;
+    
+    diffContainer.innerHTML = '';
+    let diffCount = 0;
+
+    Object.keys(newConfig).forEach(key => {
+        if (key === 'SCALE_CONFIGS') {
+            const oldScales = activeServerConfig.SCALE_CONFIGS || {};
+            const newScales = newConfig.SCALE_CONFIGS || {};
+            Object.keys(newScales).forEach(ch => {
+                const oldCh = oldScales[ch] || {};
+                const newCh = newScales[ch] || {};
+                ['enabled', 'low_voltage', 'high_voltage', 'low_value', 'high_value'].forEach(f => {
+                    if (oldCh[f] !== undefined && String(oldCh[f]) !== String(newCh[f])) {
+                        diffCount++;
+                        const item = document.createElement('div');
+                        item.className = 'diff-item';
+                        item.innerHTML = `
+                            <span class="diff-key">AI ${ch} Scale (${f})</span>
+                            <div class="diff-vals">
+                                <span class="diff-old">${oldCh[f]}</span>
+                                <span class="diff-arrow">&rarr;</span>
+                                <span class="diff-new">${newCh[f]}</span>
+                            </div>
+                        `;
+                        diffContainer.appendChild(item);
+                    }
+                });
+            });
+            return;
+        }
+
+        const oldVal = activeServerConfig[key];
+        const newVal = newConfig[key];
+        if (oldVal !== undefined && String(oldVal) !== String(newVal)) {
+            diffCount++;
+            const item = document.createElement('div');
+            item.className = 'diff-item';
+            item.innerHTML = `
+                <span class="diff-key">${key}</span>
+                <div class="diff-vals">
+                    <span class="diff-old">${oldVal}</span>
+                    <span class="diff-arrow">&rarr;</span>
+                    <span class="diff-new">${newVal}</span>
+                </div>
+            `;
+            diffContainer.appendChild(item);
+        }
+    });
+
+    if (diffCount === 0) {
+        diffContainer.innerHTML = '<div class="no-diff-msg">No parameters modified. (Direct commit will re-save current configuration)</div>';
+    }
+
+    if (countBadge) countBadge.textContent = `${diffCount} CHANGES`;
+
+    const clockRate = newConfig.CLOCK_RATE || 1000;
+    const metaClock = document.getElementById('modal-meta-clock');
+    if (metaClock) metaClock.textContent = `${clockRate} Hz`;
+
+    const minRateText = document.getElementById('calc-size-min')?.textContent || '--';
+    const metaRate = document.getElementById('modal-meta-rate');
+    if (metaRate) metaRate.textContent = minRateText;
+
+    document.getElementById('confirm-modal-overlay')?.classList.remove('hidden');
+}
+
+// Close audit modal
+function closeConfirmAuditModal() {
+    document.getElementById('confirm-modal-overlay')?.classList.add('hidden');
+    pendingConfigPayload = null;
+}
+
+// Execute write operation to backend config.json
+async function commitConfigToBackend() {
+    if (!pendingConfigPayload) return;
+    const payload = pendingConfigPayload;
 
     try {
         const res = await fetch('/api/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(configData)
+            body: JSON.stringify(payload)
         });
         
         if (!res.ok) throw new Error("Failed to save.");
-        showToast("Configuration saved successfully.");
-        appendLog('SUCCESS', 'Configuration changes committed to config.json.');
+
+        activeServerConfig = JSON.parse(JSON.stringify(payload));
+        closeConfirmAuditModal();
+        showToast("Configuration written to disk successfully.");
+        appendLog('SUCCESS', 'Configuration audit approved and committed to config.json.');
+
+        // Show Save Status Confirmation Badges across all panels
+        const now = new Date();
+        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+        const savedText = `✓ CONFIG SAVED AT ${timeStr}`;
+        document.querySelectorAll('.save-status-badge').forEach(badge => {
+            badge.classList.remove('badge-warning');
+            badge.dataset.savedTime = savedText;
+            const textEl = badge.querySelector('.save-status-text');
+            if (textEl) textEl.textContent = savedText;
+            badge.classList.remove('hidden');
+        });
     } catch (e) {
         showToast("Error saving configuration.", true);
         appendLog('ERROR', `Failed to write config: ${e.message}`);
@@ -466,49 +693,277 @@ function bindSocketEvents() {
     });
 }
 
-// Enable/Disable scaling sub-inputs based on toggle checkbox
-function toggleScalingFields() {
-    const isEnabled = document.getElementById('SCALE_ENABLED').checked;
-    const fields = ['SCALE_LOW_VOLTAGE', 'SCALE_HIGH_VOLTAGE', 'SCALE_LOW_VALUE', 'SCALE_HIGH_VALUE'];
-    fields.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) {
-            el.disabled = !isEnabled;
-            el.required = isEnabled; // Require input values if enabled
-        }
+// Render Channel & Port Ingestion Matrix Table
+function renderIngestionMatrixTable(config) {
+    const tbody = document.getElementById('ingestion-matrix-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    scaleConfigs = config.SCALE_CONFIGS || {};
+    const channelCount = config.CHANNEL_COUNT || 1;
+    const enableAi = config.ENABLE_AI !== false;
+    const enableDi = config.ENABLE_DI !== false;
+
+    // 1. Render Analog Input (AI) Rows (0 to 7)
+    for (let i = 0; i < 8; i++) {
+        const scaleCfg = scaleConfigs[String(i)] || { enabled: false, low_voltage: 0.0, high_voltage: 10.0, low_value: 0.0, high_value: 100.0 };
+        const isIngestActive = enableAi && (i < channelCount);
+        
+        const tr = document.createElement('tr');
+        tr.className = `row-ai ${isIngestActive ? '' : 'row-disabled'}`;
+        tr.dataset.ch = i;
+
+        tr.innerHTML = `
+            <td>
+                <div class="ch-badge-cell">
+                    <span class="badge badge-ai">AI ${i}</span>
+                    <span class="ch-id monospace">ch${i}</span>
+                </div>
+            </td>
+            <td><span class="type-label">Analog Volt</span></td>
+            <td style="text-align: center;">
+                <label class="toggle-switch">
+                    <input type="checkbox" class="ingest-toggle-ai" data-ch="${i}" ${isIngestActive ? 'checked' : ''}>
+                    <span class="toggle-slider"></span>
+                </label>
+            </td>
+            <td style="text-align: center;">
+                <label class="toggle-switch switch-cyan">
+                    <input type="checkbox" class="scale-toggle-ai" data-ch="${i}" ${scaleCfg.enabled ? 'checked' : ''}>
+                    <span class="toggle-slider"></span>
+                </label>
+            </td>
+            <td><input type="number" class="table-input scale-low-volt" data-ch="${i}" step="any" value="${scaleCfg.low_voltage}" ${scaleCfg.enabled ? '' : 'disabled'}></td>
+            <td><input type="number" class="table-input scale-high-volt" data-ch="${i}" step="any" value="${scaleCfg.high_voltage}" ${scaleCfg.enabled ? '' : 'disabled'}></td>
+            <td><input type="number" class="table-input scale-low-val" data-ch="${i}" step="any" value="${scaleCfg.low_value}" ${scaleCfg.enabled ? '' : 'disabled'}></td>
+            <td><input type="number" class="table-input scale-high-val" data-ch="${i}" step="any" value="${scaleCfg.high_value}" ${scaleCfg.enabled ? '' : 'disabled'}></td>
+        `;
+
+        tbody.appendChild(tr);
+    }
+
+    // 2. Render Digital Input (DI) Rows (0 to 7)
+    for (let j = 0; j < 8; j++) {
+        const isDiActive = enableDi;
+
+        const tr = document.createElement('tr');
+        tr.className = `row-di ${isDiActive ? '' : 'row-disabled'}`;
+        tr.dataset.di = j;
+
+        tr.innerHTML = `
+            <td>
+                <div class="ch-badge-cell">
+                    <span class="badge badge-di">DI ${j}</span>
+                    <span class="ch-id monospace">ch${100 + j}</span>
+                </div>
+            </td>
+            <td><span class="type-label text-cyan">Digital Bit</span></td>
+            <td style="text-align: center;">
+                <label class="toggle-switch switch-cyan">
+                    <input type="checkbox" class="ingest-toggle-di" data-di="${j}" ${isDiActive ? 'checked' : ''}>
+                    <span class="toggle-slider"></span>
+                </label>
+            </td>
+            <td style="text-align: center;"><span class="text-muted monospace" style="font-size: 0.65rem;">N/A</span></td>
+            <td><span class="text-muted monospace">-</span></td>
+            <td><span class="text-muted monospace">-</span></td>
+            <td><span class="text-muted monospace">-</span></td>
+            <td><span class="text-muted monospace">-</span></td>
+        `;
+
+        tbody.appendChild(tr);
+    }
+
+    // 3. Bind Event Listeners for Row Scale Toggles & Ingestion Switches
+    bindMatrixTableEvents();
+}
+
+// Bind Matrix Table Row Controls & Filters
+function bindMatrixTableEvents() {
+    const tbody = document.getElementById('ingestion-matrix-tbody');
+    if (!tbody) return;
+
+    // AI Ingestion Row Toggle
+    tbody.querySelectorAll('.ingest-toggle-ai').forEach(sw => {
+        sw.addEventListener('change', (e) => {
+            const tr = e.target.closest('tr');
+            if (tr) tr.classList.toggle('row-disabled', !e.target.checked);
+            updateGlobalSamplingFromTable();
+        });
+    });
+
+    // DI Ingestion Row Toggle
+    tbody.querySelectorAll('.ingest-toggle-di').forEach(sw => {
+        sw.addEventListener('change', (e) => {
+            const tr = e.target.closest('tr');
+            if (tr) tr.classList.toggle('row-disabled', !e.target.checked);
+            updateGlobalSamplingFromTable();
+        });
+    });
+
+    // AI Linear Scale Toggle
+    tbody.querySelectorAll('.scale-toggle-ai').forEach(sw => {
+        sw.addEventListener('change', (e) => {
+            const ch = e.target.dataset.ch;
+            const isChecked = e.target.checked;
+            const tr = e.target.closest('tr');
+            if (tr) {
+                tr.querySelectorAll('.table-input').forEach(input => {
+                    input.disabled = !isChecked;
+                });
+            }
+            if (!scaleConfigs[ch]) scaleConfigs[ch] = {};
+            scaleConfigs[ch].enabled = isChecked;
+        });
+    });
+
+    // Input changes update scaleConfigs in memory
+    tbody.querySelectorAll('.table-input').forEach(input => {
+        input.addEventListener('input', (e) => {
+            const ch = e.target.dataset.ch;
+            const tr = e.target.closest('tr');
+            if (!tr) return;
+            const enabled = tr.querySelector('.scale-toggle-ai')?.checked || false;
+            const low_volt = parseFloat(tr.querySelector('.scale-low-volt')?.value) || 0.0;
+            const high_volt = parseFloat(tr.querySelector('.scale-high-volt')?.value) || 10.0;
+            const low_val = parseFloat(tr.querySelector('.scale-low-val')?.value) || 0.0;
+            const high_val = parseFloat(tr.querySelector('.scale-high-val')?.value) || 100.0;
+
+            scaleConfigs[ch] = {
+                enabled: enabled,
+                low_voltage: low_volt,
+                high_voltage: high_volt,
+                low_value: low_val,
+                high_value: high_val
+            };
+        });
+    });
+
+    // Tab filter buttons
+    const filterTabs = document.querySelectorAll('#matrix-tab-filters .tab-btn');
+    filterTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            filterTabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            const filter = tab.dataset.filter;
+
+            tbody.querySelectorAll('tr').forEach(tr => {
+                if (filter === 'all') {
+                    tr.style.display = '';
+                } else if (filter === 'ai') {
+                    tr.style.display = tr.classList.contains('row-ai') ? '' : 'none';
+                } else if (filter === 'di') {
+                    tr.style.display = tr.classList.contains('row-di') ? '' : 'none';
+                }
+            });
+        });
     });
 }
 
-// Load calibration data from config object to input fields
-function loadScaleChannelToInputs(ch) {
-    const cfg = scaleConfigs[ch] || { enabled: false, low_voltage: 0.0, high_voltage: 10.0, low_value: 0.0, high_value: 100.0 };
-    document.getElementById('SCALE_ENABLED').checked = cfg.enabled;
-    document.getElementById('SCALE_LOW_VOLTAGE').value = cfg.low_voltage;
-    document.getElementById('SCALE_HIGH_VOLTAGE').value = cfg.high_voltage;
-    document.getElementById('SCALE_LOW_VALUE').value = cfg.low_value;
-    document.getElementById('SCALE_HIGH_VALUE').value = cfg.high_value;
-    toggleScalingFields();
+// Update top-level AI/DI sampling parameters from table toggles
+function updateGlobalSamplingFromTable() {
+    const aiSwitches = document.querySelectorAll('.ingest-toggle-ai');
+    let maxAiCh = -1;
+    let anyAiActive = false;
+    aiSwitches.forEach((sw, idx) => {
+        if (sw.checked) {
+            anyAiActive = true;
+            if (idx > maxAiCh) maxAiCh = idx;
+        }
+    });
+
+    const enableAiEl = document.getElementById('ENABLE_AI');
+    if (enableAiEl) enableAiEl.checked = anyAiActive;
+
+    const chCountEl = document.getElementById('CHANNEL_COUNT');
+    if (chCountEl && maxAiCh >= 0) chCountEl.value = maxAiCh + 1;
+
+    const diSwitches = document.querySelectorAll('.ingest-toggle-di');
+    let anyDiActive = false;
+    diSwitches.forEach(sw => {
+        if (sw.checked) anyDiActive = true;
+    });
+
+    const enableDiEl = document.getElementById('ENABLE_DI');
+    if (enableDiEl) enableDiEl.checked = anyDiActive;
+
+    updateDataSizeEstimator();
 }
 
-// Save inputs back to active channel configuration in memory
-function saveInputsToScaleChannel(ch) {
-    scaleConfigs[ch] = {
-        enabled: document.getElementById('SCALE_ENABLED').checked,
-        low_voltage: parseFloat(document.getElementById('SCALE_LOW_VOLTAGE').value) || 0.0,
-        high_voltage: parseFloat(document.getElementById('SCALE_HIGH_VOLTAGE').value) || 10.0,
-        low_value: parseFloat(document.getElementById('SCALE_LOW_VALUE').value) || 0.0,
-        high_value: parseFloat(document.getElementById('SCALE_HIGH_VALUE').value) || 100.0
-    };
+// Calculate Telemetry Data Size per Min, Hour, Month
+function updateDataSizeEstimator() {
+    const clockRateEl = document.getElementById('CLOCK_RATE');
+    const clockRate = clockRateEl ? (parseInt(clockRateEl.value, 10) || 1000) : 1000;
+
+    // Count active AI channels
+    let activeAiCount = 0;
+    const aiSwitches = document.querySelectorAll('.ingest-toggle-ai');
+    if (aiSwitches.length > 0) {
+        aiSwitches.forEach(sw => { if (sw.checked) activeAiCount++; });
+    } else {
+        const enableAi = document.getElementById('ENABLE_AI')?.checked ?? true;
+        const chCount = parseInt(document.getElementById('CHANNEL_COUNT')?.value, 10) || 1;
+        activeAiCount = enableAi ? chCount : 0;
+    }
+
+    // Count active DI bits
+    let activeDiCount = 0;
+    const diSwitches = document.querySelectorAll('.ingest-toggle-di');
+    if (diSwitches.length > 0) {
+        diSwitches.forEach(sw => { if (sw.checked) activeDiCount++; });
+    } else {
+        const enableDi = document.getElementById('ENABLE_DI')?.checked ?? true;
+        activeDiCount = enableDi ? 8 : 0;
+    }
+
+    const totalChannels = activeAiCount + activeDiCount;
+    const sampleRowsPerSec = totalChannels * clockRate;
+    const bytesPerSec = sampleRowsPerSec * 40; // ~40 bytes per sample row (ts + ch + val + DB overhead)
+
+    const bytesMin = bytesPerSec * 60;
+    const bytesHour = bytesPerSec * 3600;
+    const bytesMonth = bytesPerSec * 3600 * 24 * 30; // 30-day month
+
+    const minEl = document.getElementById('calc-size-min');
+    const hourEl = document.getElementById('calc-size-hour');
+    const monthEl = document.getElementById('calc-size-month');
+
+    if (minEl) minEl.textContent = formatBytes(bytesMin) + ' / min';
+    if (hourEl) hourEl.textContent = formatBytes(bytesHour) + ' / hr';
+    if (monthEl) monthEl.textContent = formatBytes(bytesMonth) + ' / month';
 }
 
-// Handle changes to target calibration channel selection
-function handleScaleChannelTargetChange(e) {
-    // 1. Save inputs of current channel
-    saveInputsToScaleChannel(currentScaleChannel);
-    // 2. Change channel index pointer
-    currentScaleChannel = e.target.value;
-    // 3. Load config of new channel into inputs
-    loadScaleChannelToInputs(currentScaleChannel);
+function formatBytes(bytes) {
+    if (!bytes || bytes === 0) return '0.00 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Save inputs back to active channel configuration in memory from table
+function collectScaleConfigsFromMatrixTable() {
+    const tbody = document.getElementById('ingestion-matrix-tbody');
+    if (!tbody) return scaleConfigs;
+
+    tbody.querySelectorAll('tr.row-ai').forEach(tr => {
+        const ch = tr.dataset.ch;
+        const enabled = tr.querySelector('.scale-toggle-ai')?.checked || false;
+        const low_volt = parseFloat(tr.querySelector('.scale-low-volt')?.value) || 0.0;
+        const high_volt = parseFloat(tr.querySelector('.scale-high-volt')?.value) || 10.0;
+        const low_val = parseFloat(tr.querySelector('.scale-low-val')?.value) || 0.0;
+        const high_val = parseFloat(tr.querySelector('.scale-high-val')?.value) || 100.0;
+
+        scaleConfigs[ch] = {
+            enabled: enabled,
+            low_voltage: low_volt,
+            high_voltage: high_volt,
+            low_value: low_val,
+            high_value: high_val
+        };
+    });
+
+    return scaleConfigs;
 }
 
 // Dynamically replace 'localhost' in back link with the accessing IP/hostname

@@ -95,10 +95,9 @@ def _build_mockup_dsn(original_dsn: str, dbname: str) -> str:
     parts["dbname"] = dbname
     return psycopg2.extensions.make_dsn(**parts)
 
-# DSN pointing at the postgres maintenance DB (for CREATE DATABASE)
-_POSTGRES_DSN = _build_mockup_dsn(config.MOCKUP_DB_DSN, "postgres")
-# DSN pointing at our "mockup" DB (for all actual data inserts)
-MOCKUP_MOCKUP_DB_DSN = _build_mockup_dsn(config.MOCKUP_DB_DSN, MOCKUP_DB_NAME)
+mockup_dsn = getattr(config, 'MOCKUP_DB_DSN', getattr(config, 'DB_DSN', 'postgresql://admin:admin@172.21.108.86:5432/daq_db'))
+_POSTGRES_DSN = _build_mockup_dsn(mockup_dsn, "postgres")
+MOCKUP_MOCKUP_DB_DSN = _build_mockup_dsn(mockup_dsn, MOCKUP_DB_NAME)
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -223,39 +222,42 @@ def ensure_mockup_db():
 # ─── Mock DAQ Generator Thread ───────────────────────────────────────────────
 def mock_daq_reader_thread():
     """
-    Simulates WaveformAiCtrl.getDataF64() without real hardware.
+    Simulates WaveformAiCtrl.getDataF64() and InstantDiCtrl without real hardware.
 
-    Generates interleaved samples:
-        raw_data = [ch0_s0, ch1_s0, ch0_s1, ch1_s1, ...]
-
+    Generates interleaved AI samples and synthetic DI port bytes.
     Timing: sleeps for the real acquisition window
         (SECTION_LENGTH / CLOCK_RATE) seconds per batch,
     so downstream throughput matches a real device.
     """
     try:
-        n_ch    = config.CHANNEL_COUNT
+        enable_ai = getattr(config, 'ENABLE_AI', True)
+        enable_di = getattr(config, 'ENABLE_DI', True)
+        di_start_port = getattr(config, 'DI_START_PORT', 0)
+        di_port_count = getattr(config, 'DI_PORT_COUNT', 1)
+
+        n_ch    = config.CHANNEL_COUNT if enable_ai else 0
         sec_len = config.SECTION_LENGTH      # samples per channel per batch
         buf_sz  = config.USER_BUFFER_SIZE   # = sec_len × n_ch
         dt_s    = 1.0 / config.CLOCK_RATE  # seconds per sample
 
         # Guard: clamp waveform table to available entries (cycle if fewer entries than channels)
-        waveforms = (MOCKUP_CHANNEL_WAVEFORMS * n_ch)[:n_ch]
+        waveforms = (MOCKUP_CHANNEL_WAVEFORMS * max(1, n_ch))[:n_ch] if n_ch > 0 else []
 
         # Monotonic sample counter — advances the sine phase continuously across batches
         sample_counter = 0
 
         log.info(
-            f"[MockDAQ] Started | device=MOCK | channels={n_ch} "
-            f"| clock={config.CLOCK_RATE} Hz | sectionLength={sec_len} "
-            f"| userBuffer={buf_sz}"
+            f"[MockDAQ] Started | device=MOCK | enable_ai={enable_ai} | enable_di={enable_di} | "
+            f"channels={n_ch} | diPorts={di_port_count} | clock={config.CLOCK_RATE} Hz | sectionLength={sec_len}"
         )
-        log.info("[MockDAQ] Waveforms per channel:")
-        for i in range(n_ch):
-            amp, freq, dc = waveforms[i]
-            log.info(
-                f"  ch{config.START_CHANNEL + i}: "
-                f"{amp:.2f} V × sin(2π×{freq:.1f}Hz×t) + {dc:.2f} V  (noise σ={MOCKUP_NOISE_STD_V} V)"
-            )
+        if enable_ai and n_ch > 0:
+            log.info("[MockDAQ] Waveforms per channel:")
+            for i in range(n_ch):
+                amp, freq, dc = waveforms[i]
+                log.info(
+                    f"  ch{config.START_CHANNEL + i}: "
+                    f"{amp:.2f} V × sin(2π×{freq:.1f}Hz×t) + {dc:.2f} V  (noise σ={MOCKUP_NOISE_STD_V} V)"
+                )
 
         try:
             while not stop_event.is_set():
@@ -265,28 +267,41 @@ def mock_daq_reader_thread():
                 if stop_event.is_set():
                     break
 
-                # ── Generate interleaved samples ──
+                # ── Generate interleaved AI samples ──
                 raw_data = []
-                for s in range(sec_len):
-                    t = (sample_counter + s) * dt_s
-                    for ch_idx in range(n_ch):
-                        amp, freq, dc = waveforms[ch_idx]
-                        value = amp * math.sin(2 * math.pi * freq * t) + dc
-                        value += random.gauss(0.0, MOCKUP_NOISE_STD_V)
-                        value = max(0.0, min(5.0, value))   # clamp to V_0To5 range
-                        raw_data.append(value)
+                if enable_ai and n_ch > 0:
+                    for s in range(sec_len):
+                        t = (sample_counter + s) * dt_s
+                        for ch_idx in range(n_ch):
+                            amp, freq, dc = waveforms[ch_idx]
+                            value = amp * math.sin(2 * math.pi * freq * t) + dc
+                            value += random.gauss(0.0, MOCKUP_NOISE_STD_V)
+                            value = max(0.0, min(5.0, value))   # clamp to V_0To5 range
+                            raw_data.append(value)
 
                 sample_counter += sec_len
                 returned_count  = len(raw_data)
+
+                # ── Generate synthetic DI port bytes ──
+                di_bytes = []
+                if enable_di:
+                    t_sec = time.time()
+                    for p in range(di_port_count):
+                        b0 = 1 if int(t_sec) % 2 == 0 else 0
+                        b1 = 1 if int(t_sec / 2) % 2 == 0 else 0
+                        b2 = 1 if int(t_sec * 2) % 2 == 0 else 0
+                        b3 = 1 if random.random() > 0.8 else 0
+                        port_val = (b0) | (b1 << 1) | (b2 << 2) | (b3 << 3)
+                        di_bytes.append(port_val)
 
                 # ── Capture wall-clock timestamp immediately after "acquisition" ──
                 batch_wall_ts_ns = time.time_ns()
 
                 # ── Enqueue (identical logic to real code) ──
                 try:
-                    data_queue.put_nowait((batch_wall_ts_ns, raw_data, returned_count))
+                    data_queue.put_nowait((batch_wall_ts_ns, raw_data, returned_count, di_bytes))
                     with stats_lock:
-                        stats["polled"]   += returned_count
+                        stats["polled"]   += returned_count + (len(di_bytes) * 8 if returned_count == 0 else 0)
                         stats["enqueued"] += 1
                 except queue.Full:
                     with stats_lock:
@@ -336,21 +351,26 @@ class Calibrator:
 
 class DaqSampleParser:
     """
-    Responsibility: Parse interleaved raw DAQ data and compute timestamps relative to a periodic anchor.
+    Responsibility: Parse interleaved raw DAQ data (AI and DI) and compute timestamps relative to a periodic anchor.
     """
-    def __init__(self, start_channel, channel_count, clock_rate, calibrator, recalibrate_interval_hr=24.0):
+    def __init__(self, start_channel, channel_count, clock_rate, calibrator, di_channel_offset=100, enable_di=True, recalibrate_interval_hr=24.0):
         self.start_channel = start_channel
         self.channel_count = channel_count
         self.dt_ns = int(1_000_000_000 / clock_rate)
         self.calibrator = calibrator
+        self.di_channel_offset = di_channel_offset
+        self.enable_di = enable_di
         
         # Periodic anchor state configuration
         self.recalibrate_interval_ns = int(recalibrate_interval_hr * 3600 * 1_000_000_000)
         self.anchor_time_ns = None
         self.samples_since_anchor = 0
 
-    def parse_batch(self, batch_wall_ts_ns, raw_data, returned_count):
-        samples_per_channel = returned_count // self.channel_count
+    def parse_batch(self, batch_wall_ts_ns, raw_data, returned_count, di_bytes=None):
+        if self.channel_count > 0 and returned_count > 0:
+            samples_per_channel = returned_count // self.channel_count
+        else:
+            samples_per_channel = getattr(config, 'SECTION_LENGTH', 500)
         
         # Re-anchor the base timestamp if not yet set or if the configured interval has elapsed
         current_time_ns = time.time_ns()
@@ -363,11 +383,22 @@ class DaqSampleParser:
             # Calculate forward timestamp based on cumulative samples since the last anchor
             sample_ts_ns = self.anchor_time_ns + (self.samples_since_anchor + s) * self.dt_ns
             sample_ts = datetime.fromtimestamp(sample_ts_ns / 1_000_000_000, tz=timezone.utc)
-            for ch in range(self.channel_count):
-                value = raw_data[s * self.channel_count + ch]
-                value = self.calibrator.calibrate(ch, value)
-                value = round(value, 3)
-                rows.append((sample_ts, self.start_channel + ch, value))
+
+            # Process Analog Input channels
+            if returned_count > 0 and self.channel_count > 0:
+                for ch in range(self.channel_count):
+                    value = raw_data[s * self.channel_count + ch]
+                    value = self.calibrator.calibrate(ch, value)
+                    value = round(value, 3)
+                    rows.append((sample_ts, self.start_channel + ch, value))
+
+            # Process Digital Input channels
+            if self.enable_di and di_bytes:
+                for port_idx, port_val in enumerate(di_bytes):
+                    for bit_idx in range(8):
+                        di_ch_index = self.di_channel_offset + (port_idx * 8) + bit_idx
+                        bit_val = float((port_val >> bit_idx) & 1)
+                        rows.append((sample_ts, di_ch_index, bit_val))
                 
         # Advance cumulative sample count for the next batch
         self.samples_since_anchor += samples_per_channel
@@ -640,6 +671,8 @@ def db_writer_thread():
         channel_count=config.CHANNEL_COUNT,
         clock_rate=config.CLOCK_RATE,
         calibrator=calibrator,
+        di_channel_offset=getattr(config, 'DI_CHANNEL_OFFSET', 100),
+        enable_di=getattr(config, 'ENABLE_DI', True),
         recalibrate_interval_hr=getattr(config, 'ANCHOR_RECALIBRATE_INTERVAL_HR', 24.0)
     )
 
@@ -691,12 +724,17 @@ def db_writer_thread():
     try:
         while not stop_event.is_set() or not data_queue.empty():
             try:
-                batch_wall_ts_ns, raw_data, returned_count = data_queue.get(timeout=1.0)
+                item = data_queue.get(timeout=1.0)
+                if len(item) == 4:
+                    batch_wall_ts_ns, raw_data, returned_count, di_bytes = item
+                else:
+                    batch_wall_ts_ns, raw_data, returned_count = item
+                    di_bytes = None
             except queue.Empty:
                 continue
 
             # 1. Parse raw data into sample rows
-            rows = parser.parse_batch(batch_wall_ts_ns, raw_data, returned_count)
+            rows = parser.parse_batch(batch_wall_ts_ns, raw_data, returned_count, di_bytes)
 
             # 2. Write rows to TimescaleDB or publish to MQTT
             try:

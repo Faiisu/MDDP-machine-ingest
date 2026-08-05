@@ -89,53 +89,69 @@ stats = {
 # ─── DAQ Reader Thread ────────────────────────────────────────────────────────
 def daq_reader_thread():
     """
-    Responsibility: poll hardware as fast as possible, enqueue raw data.
-    Does NO parsing — just copies the returned list and enqueues immediately.
+    Responsibility: poll hardware as fast as possible, enqueue raw AI and DI data.
+    Does minimal work — copies returned AI data and reads DI port states, then enqueues.
     """
+    enable_ai = getattr(config, 'ENABLE_AI', True)
+    enable_di = getattr(config, 'ENABLE_DI', True)
+    di_start_port = getattr(config, 'DI_START_PORT', 0)
+    di_port_count = getattr(config, 'DI_PORT_COUNT', 1)
+
+    wf = None
+    di_ctrl = None
+
     try:
-        wf = WaveformAiCtrl(config.DEVICE_DESCRIPTION)
-        wf.loadProfile         = config.PROFILE_PATH
-        wf.conversion.channelStart = config.START_CHANNEL
-        wf.conversion.channelCount = config.CHANNEL_COUNT
-        wf.conversion.clockRate    = config.CLOCK_RATE
-        wf.record.sectionCount     = config.SECTION_COUNT
-        wf.record.sectionLength    = config.SECTION_LENGTH
+        if enable_ai:
+            wf = WaveformAiCtrl(config.DEVICE_DESCRIPTION)
+            wf.loadProfile         = config.PROFILE_PATH
+            wf.conversion.channelStart = config.START_CHANNEL
+            wf.conversion.channelCount = config.CHANNEL_COUNT
+            wf.conversion.clockRate    = config.CLOCK_RATE
+            wf.record.sectionCount     = config.SECTION_COUNT
+            wf.record.sectionLength    = config.SECTION_LENGTH
 
-        for i in range(config.CHANNEL_COUNT):
-            wf.channels[config.START_CHANNEL + i].signalType = AiSignalType.SingleEnded
-            wf.channels[config.START_CHANNEL + i].valueRange = ValueRange.V_0To5
+            for i in range(config.CHANNEL_COUNT):
+                wf.channels[config.START_CHANNEL + i].signalType = AiSignalType.SingleEnded
+                wf.channels[config.START_CHANNEL + i].valueRange = ValueRange.V_0To5
 
-        ret = wf.prepare()
-        if BioFailed(ret):
-            log.error("DAQ prepare() failed — check device connection and profile.xml")
-            stop_event.set()
-            return
+            ret = wf.prepare()
+            if BioFailed(ret):
+                log.error("DAQ AI prepare() failed — check device connection and profile.xml")
+                stop_event.set()
+                return
 
-        ret = wf.start()
-        if BioFailed(ret):
-            log.error("DAQ start() failed")
-            stop_event.set()
-            return
+            ret = wf.start()
+            if BioFailed(ret):
+                log.error("DAQ AI start() failed")
+                stop_event.set()
+                return
 
-        log.info(
-            f"DAQ started | device={config.DEVICE_DESCRIPTION} | "
-            f"channels={config.CHANNEL_COUNT} | clock={config.CLOCK_RATE} Hz | "
-            f"sectionLength={config.SECTION_LENGTH} | userBuffer={config.USER_BUFFER_SIZE}"
-        )
+            log.info(
+                f"DAQ AI started | device={config.DEVICE_DESCRIPTION} | "
+                f"channels={config.CHANNEL_COUNT} | clock={config.CLOCK_RATE} Hz | "
+                f"sectionLength={config.SECTION_LENGTH} | userBuffer={config.USER_BUFFER_SIZE}"
+            )
 
-        try:
-            log.info("DAQ loop started — periodic wall-clock re-anchoring active")
+        if enable_di:
+            try:
+                from Automation.BDaq.InstantDiCtrl import InstantDiCtrl
+                di_ctrl = InstantDiCtrl(config.DEVICE_DESCRIPTION)
+                if hasattr(di_ctrl, 'loadProfile'):
+                    di_ctrl.loadProfile = config.PROFILE_PATH
+                log.info(f"DAQ DI initialized | device={config.DEVICE_DESCRIPTION} | startPort={di_start_port} | portCount={di_port_count}")
+            except Exception as di_err:
+                log.error(f"Failed to initialize InstantDiCtrl: {di_err}")
+                di_ctrl = None
 
-            while not stop_event.is_set():
-                # Block until USER_BUFFER_SIZE interleaved samples are ready
-                # timeout=-1 means wait indefinitely for requested count
+        log.info("DAQ loop started — periodic wall-clock re-anchoring active")
+
+        while not stop_event.is_set():
+            ai_raw_copy = []
+            returned_count = 0
+
+            if enable_ai and wf is not None:
                 result = wf.getDataF64(config.USER_BUFFER_SIZE, -1)
-
-                # ── Capture wall-clock timestamp IMMEDIATELY after getDataF64() returns ──
-                # This is the best approximation of when the LAST sample in this batch
-                # was produced by the hardware. OS scheduling jitter is typically ~1 ms.
                 batch_wall_ts_ns = time.time_ns()
-
                 ret, returned_count, raw_data = result[0], result[1], result[2]
 
                 if BioFailed(ret):
@@ -146,30 +162,52 @@ def daq_reader_thread():
                 if returned_count <= 0:
                     continue
 
-                # ── Minimal work: copy raw list + enqueue immediately ──
-                # DO NOT loop/parse here — let DB writer handle it
-                raw_copy = list(raw_data[:returned_count])
+                ai_raw_copy = list(raw_data[:returned_count])
+            else:
+                block_dur = float(config.SECTION_LENGTH) / float(config.CLOCK_RATE)
+                time.sleep(block_dur)
+                batch_wall_ts_ns = time.time_ns()
 
+            di_bytes = []
+            if enable_di and di_ctrl is not None:
                 try:
-                    data_queue.put_nowait((batch_wall_ts_ns, raw_copy, returned_count))
-                    with stats_lock:
-                        stats["polled"]   += returned_count
-                        stats["enqueued"] += 1
-                except queue.Full:
-                    with stats_lock:
-                        stats["dropped"] += 1
-                    log.warning(
-                        f"Queue full! Dropped 1 batch ({returned_count} samples). "                     
-                    )
+                    ret_di, di_data = di_ctrl.readAny(di_start_port, di_port_count)
+                    if not BioFailed(ret_di):
+                        di_bytes = list(di_data)
+                except Exception as read_di_err:
+                    log.warning(f"Error reading DI: {read_di_err}")
 
-        finally:
-            wf.stop()
-            wf.release()
-            wf.dispose()
-            log.info("DAQ thread stopped and device released.")
+            try:
+                data_queue.put_nowait((batch_wall_ts_ns, ai_raw_copy, returned_count, di_bytes))
+                with stats_lock:
+                    stats["polled"]   += returned_count + (len(di_bytes) * 8 if returned_count == 0 else 0)
+                    stats["enqueued"] += 1
+            except queue.Full:
+                with stats_lock:
+                    stats["dropped"] += 1
+                log.warning(
+                    f"Queue full! Dropped 1 batch ({returned_count} AI samples)."
+                )
+
     except Exception as e:
         log.exception(f"Unhandled exception in DAQ Reader thread: {e}")
         stop_event.set()
+    finally:
+        if wf is not None:
+            try:
+                wf.stop()
+                wf.release()
+                wf.dispose()
+                log.info("DAQ AI thread stopped and device released.")
+            except Exception:
+                pass
+        if di_ctrl is not None:
+            try:
+                di_ctrl.cleanup()
+                di_ctrl.dispose()
+                log.info("DAQ DI controller released.")
+            except Exception:
+                pass
 
 
 
@@ -204,21 +242,26 @@ class Calibrator:
 
 class DaqSampleParser:
     """
-    Responsibility: Parse interleaved raw DAQ data and compute timestamps relative to a periodic anchor.
+    Responsibility: Parse interleaved raw DAQ data (AI and DI) and compute timestamps relative to a periodic anchor.
     """
-    def __init__(self, start_channel, channel_count, clock_rate, calibrator, recalibrate_interval_hr=24.0):
+    def __init__(self, start_channel, channel_count, clock_rate, calibrator, di_channel_offset=100, enable_di=True, recalibrate_interval_hr=24.0):
         self.start_channel = start_channel
         self.channel_count = channel_count
         self.dt_ns = int(1_000_000_000 / clock_rate)
         self.calibrator = calibrator
+        self.di_channel_offset = di_channel_offset
+        self.enable_di = enable_di
         
         # Periodic anchor state configuration
         self.recalibrate_interval_ns = int(recalibrate_interval_hr * 3600 * 1_000_000_000)
         self.anchor_time_ns = None
         self.samples_since_anchor = 0
 
-    def parse_batch(self, batch_wall_ts_ns, raw_data, returned_count):
-        samples_per_channel = returned_count // self.channel_count
+    def parse_batch(self, batch_wall_ts_ns, raw_data, returned_count, di_bytes=None):
+        if self.channel_count > 0 and returned_count > 0:
+            samples_per_channel = returned_count // self.channel_count
+        else:
+            samples_per_channel = getattr(config, 'SECTION_LENGTH', 500)
         
         # Re-anchor the base timestamp if not yet set or if the configured interval has elapsed
         current_time_ns = time.time_ns()
@@ -231,11 +274,22 @@ class DaqSampleParser:
             # Calculate forward timestamp based on cumulative samples since the last anchor
             sample_ts_ns = self.anchor_time_ns + (self.samples_since_anchor + s) * self.dt_ns
             sample_ts = datetime.fromtimestamp(sample_ts_ns / 1_000_000_000, tz=timezone.utc)
-            for ch in range(self.channel_count):
-                value = raw_data[s * self.channel_count + ch]
-                value = self.calibrator.calibrate(ch, value)
-                value = round(value, 3)
-                rows.append((sample_ts, self.start_channel + ch, value))
+
+            # Process Analog Input channels
+            if returned_count > 0 and self.channel_count > 0:
+                for ch in range(self.channel_count):
+                    value = raw_data[s * self.channel_count + ch]
+                    value = self.calibrator.calibrate(ch, value)
+                    value = round(value, 3)
+                    rows.append((sample_ts, self.start_channel + ch, value))
+
+            # Process Digital Input channels
+            if self.enable_di and di_bytes:
+                for port_idx, port_val in enumerate(di_bytes):
+                    for bit_idx in range(8):
+                        di_ch_index = self.di_channel_offset + (port_idx * 8) + bit_idx
+                        bit_val = float((port_val >> bit_idx) & 1)
+                        rows.append((sample_ts, di_ch_index, bit_val))
                 
         # Advance cumulative sample count for the next batch
         self.samples_since_anchor += samples_per_channel
@@ -575,6 +629,8 @@ def db_writer_thread():
         channel_count=config.CHANNEL_COUNT,
         clock_rate=config.CLOCK_RATE,
         calibrator=calibrator,
+        di_channel_offset=getattr(config, 'DI_CHANNEL_OFFSET', 100),
+        enable_di=getattr(config, 'ENABLE_DI', True),
         recalibrate_interval_hr=getattr(config, 'ANCHOR_RECALIBRATE_INTERVAL_HR', 24.0)
     )
 
@@ -614,12 +670,17 @@ def db_writer_thread():
 
     while not stop_event.is_set() or not data_queue.empty():
         try:
-            batch_wall_ts_ns, raw_data, returned_count = data_queue.get(timeout=1.0)
+            item = data_queue.get(timeout=1.0)
+            if len(item) == 4:
+                batch_wall_ts_ns, raw_data, returned_count, di_bytes = item
+            else:
+                batch_wall_ts_ns, raw_data, returned_count = item
+                di_bytes = None
         except queue.Empty:
             continue
 
         # 1. Parse raw data into sample rows
-        rows = parser.parse_batch(batch_wall_ts_ns, raw_data, returned_count)
+        rows = parser.parse_batch(batch_wall_ts_ns, raw_data, returned_count, di_bytes)
 
         # 2. Write/Publish samples (SRP delegation)
         try:
