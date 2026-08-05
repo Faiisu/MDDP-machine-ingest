@@ -5,7 +5,7 @@ MDDP service consoles use an instrument-rack visual language: dense but readable
 ## Base files
 
 - [`services/influxdb/static/ui-tokens.css`](../services/influxdb/static/ui-tokens.css) defines themes, semantic colors, typography, radii, and motion tokens.
-- [`services/influxdb/static/ui-patterns.css`](../services/influxdb/static/ui-patterns.css) defines the shell, header, sidebar rail, workspace, cards, forms, buttons, terminal, toast, and responsive primitives.
+- [`services/influxdb/static/ui-patterns.css`](../services/influxdb/static/ui-patterns.css) defines the shell, header, sidebar rail, workspace, cards, forms, buttons, terminal, toast, and responsive primitives. Musashi II and Musashi IV carry the same base files in their own static bundles.
 - [`services/influxdb/static/style.css`](../services/influxdb/static/style.css) composes those primitives for the InfluxDB domain.
 
 The InfluxDB service is the reference implementation. A new service should copy the two base files into its own static bundle and keep domain-specific rules in its own `style.css`.

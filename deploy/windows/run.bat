@@ -9,6 +9,7 @@ set "DAQ_PID_FILE=.daq.pid"
 set "MUSASHI_II_PID_FILE=.musashi_ii.pid"
 set "MUSASHI_IV_PID_FILE=.musashi_iv.pid"
 set "PLOTTER_PID_FILE=.plotter.pid"
+set "INFLUXDB_MGR_PID_FILE=.influxdb_mgr.pid"
 
 rem Safeguard check to prevent starting duplicate instances
 if exist "%PORTAL_PID_FILE%" goto :already_running
@@ -16,6 +17,7 @@ if exist "%DAQ_PID_FILE%" goto :already_running
 if exist "%MUSASHI_II_PID_FILE%" goto :already_running
 if exist "%MUSASHI_IV_PID_FILE%" goto :already_running
 if exist "%PLOTTER_PID_FILE%" goto :already_running
+if exist "%INFLUXDB_MGR_PID_FILE%" goto :already_running
 goto :start_services
 
 :already_running
@@ -56,7 +58,7 @@ echo ==========================================================
 
 rem 1. Start Main Portal Gateway (Port 8080)
 echo [SYSTEM] Starting Ingestion Portal on Port 8080 (all interfaces)...
-start "MDDP_PORTAL_HUB" /min cmd /c "title MDDP_PORTAL_HUB && %PYTHON_BIN% -m http.server 8080 --directory services\portal >> logs\portal.log 2>&1"
+start "MDDP_PORTAL_HUB" /min cmd /c "title MDDP_PORTAL_HUB && %PYTHON_BIN% services\portal\app.py >> logs\portal.log 2>&1"
 echo 1 > "%PORTAL_PID_FILE%"
 
 rem 2. Start DAQ USB-4716 Control Panel (Port 8081)
@@ -78,6 +80,11 @@ rem 5. Start Database Plotter (Port 8084)
 echo [SYSTEM] Starting Database Plotter on Port 8084 (all interfaces)...
 start "MDDP_PLOTTER_SERVICE" /min cmd /c "title MDDP_PLOTTER_SERVICE && %PYTHON_BIN% services\plotter\app.py >> logs\plotter.log 2>&1"
 echo 1 > "%PLOTTER_PID_FILE%"
+
+rem 6. Start InfluxDB Manager (Port 8085)
+echo [SYSTEM] Starting InfluxDB Manager on Port 8085 (all interfaces)...
+start "MDDP_INFLUXDB_MANAGER" /min cmd /c "title MDDP_INFLUXDB_MANAGER && %PYTHON_BIN% services\influxdb\app.py >> logs\influxdb_manager.log 2>&1"
+echo 1 > "%INFLUXDB_MGR_PID_FILE%"
 
 echo [SYSTEM] Services launched in background.
 echo [SYSTEM] Accessible locally at http://localhost:8080

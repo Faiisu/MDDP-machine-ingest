@@ -9,6 +9,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$PROJECT_ROOT" || exit 1
 
 DAQ_PID_FILE=".daq.pid"
+PORTAL_PID_FILE=".portal.pid"
 MUSASHI_II_PID_FILE=".musashi_ii.pid"
 MUSASHI_IV_PID_FILE=".musashi_iv.pid"
 PLOTTER_PID_FILE=".plotter.pid"
@@ -18,7 +19,21 @@ echo "=========================================================="
 echo "         MDDP Ingestion Control Suite Shutdown"
 echo "=========================================================="
 
-# 1. Stop DAQ Control Panel
+# 1. Stop Service Portal
+if [ -f "$PORTAL_PID_FILE" ]; then
+    PID=$(cat "$PORTAL_PID_FILE")
+    if ps -p "$PID" >/dev/null 2>&1; then
+        echo "[SYSTEM] Stopping Service Portal (PID: $PID)..."
+        kill "$PID" 2>/dev/null
+    else
+        echo "[SYSTEM] Service Portal process not found."
+    fi
+    rm "$PORTAL_PID_FILE"
+else
+    echo "[SYSTEM] Service Portal is already stopped."
+fi
+
+# 2. Stop DAQ Control Panel
 if [ -f "$DAQ_PID_FILE" ]; then
     PID=$(cat "$DAQ_PID_FILE")
     if ps -p "$PID" >/dev/null 2>&1; then

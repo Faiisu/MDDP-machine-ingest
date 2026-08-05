@@ -8,7 +8,7 @@ This folder defines the visual contract for service consoles in the MDDP system.
 - `services/influxdb/static/ui-patterns.css` — shell, rail, panel, card, form, button, terminal, and responsive primitives.
 - `services/influxdb/static/style.css` — InfluxDB-specific composition and content styling.
 
-The InfluxDB service is the first reference implementation. Copy the two `ui-*.css` files into a future service's static directory, include them before the service stylesheet, and keep service-specific rules in `style.css`.
+The InfluxDB service is the reference implementation, and Musashi II/IV now use the same shell locally. Copy the two `ui-*.css` files into a future service's static directory, include them before the service stylesheet, and keep service-specific rules in `style.css`.
 
 ## Composition contract
 

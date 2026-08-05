@@ -1,7 +1,43 @@
 // app.js
 // Musashi II Control Panel Frontend Logic
 
+function initThemeSelector() {
+    const selector = document.getElementById('ui-theme-select');
+    if (!selector) return;
+    const savedTheme = localStorage.getItem('musashi_ii_ui_theme') || 'arctic-light';
+    selector.value = savedTheme;
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    selector.addEventListener('change', (event) => {
+        document.documentElement.setAttribute('data-theme', event.target.value);
+        localStorage.setItem('musashi_ii_ui_theme', event.target.value);
+    });
+}
+
+function initPanelNavigation() {
+    const buttons = [...document.querySelectorAll('#sidebar-tab-list .nav-tab-btn')];
+    const panels = [...document.querySelectorAll('.workspace-panel')];
+    const savedPanel = localStorage.getItem('musashi_ii_active_panel');
+    const initialPanel = savedPanel && document.getElementById(savedPanel) ? savedPanel : 'panel-overview';
+    const selectPanel = (panelId) => {
+        buttons.forEach((button) => button.classList.toggle('active', button.dataset.panel === panelId));
+        panels.forEach((panel) => panel.classList.toggle('hidden', panel.id !== panelId));
+        localStorage.setItem('musashi_ii_active_panel', panelId);
+    };
+    selectPanel(initialPanel);
+    buttons.forEach((button) => button.addEventListener('click', () => selectPanel(button.dataset.panel)));
+}
+
+function resolveBackLink() {
+    const backLink = document.querySelector('.back-link');
+    if (!backLink) return;
+    const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+    backLink.href = `${protocol}//${window.location.hostname || 'localhost'}:8080`;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    initThemeSelector();
+    initPanelNavigation();
+    resolveBackLink();
     const socket = io();
 
     // DOM Elements - Status & Header
@@ -353,12 +389,14 @@ document.addEventListener('DOMContentLoaded', () => {
             btnStartReal.disabled = true;
             btnStartMock.disabled = true;
             btnStop.disabled = false;
+            document.getElementById('rail-service-state').textContent = mode === 'real' ? 'ACTIVE' : 'MOCKUP';
         } else {
             statusDot.className = 'pulse-dot offline';
             statusText.textContent = 'OFFLINE';
             btnStartReal.disabled = false;
             btnStartMock.disabled = false;
             btnStop.disabled = true;
+            document.getElementById('rail-service-state').textContent = 'STANDBY';
         }
     });
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="arctic-light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,7 +8,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='ui-tokens.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='ui-patterns.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <!-- Socket.IO Client Library -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
@@ -29,6 +31,13 @@
                 </div>
             </div>
             <div class="header-status">
+                <select id="ui-theme-select" class="theme-select-dropdown" title="Select interface theme" aria-label="Interface theme">
+                    <option value="arctic-light">Arctic Light</option>
+                    <option value="dark-ocean">Deep Ocean</option>
+                    <option value="emerald-matrix">Emerald Matrix</option>
+                    <option value="amber-cockpit">Amber Cockpit</option>
+                    <option value="dracula">Dracula Dark</option>
+                </select>
                 <div class="status-indicator" id="system-status-indicator">
                     <span class="pulse-dot offline" id="status-dot"></span>
                     <span class="status-label" id="status-text">OFFLINE</span>
@@ -37,7 +46,18 @@
             </div>
         </header>
 
-        <!-- Live Telemetry Section -->
+        <div class="main-layout">
+            <aside class="sidebar-nav">
+                <div class="sidebar-header"><span class="sidebar-title">Panel Navigation</span></div>
+                <div class="nav-tab-list" id="sidebar-tab-list">
+                    <button type="button" class="nav-tab-btn active" data-panel="panel-overview">◉ <span>Live overview</span></button>
+                    <button type="button" class="nav-tab-btn" data-panel="panel-config">⚙ <span>Configure &amp; operate</span></button>
+                </div>
+                <div class="rail-readout"><span class="rail-readout-label">Service state</span><div class="rail-readout-value" id="rail-service-state">STANDBY</div><div class="rail-readout-detail">Musashi IV / HTTP input</div></div>
+            </aside>
+            <main class="workspace-card">
+                <section id="panel-overview" class="workspace-panel">
+                    <div class="panel-header"><div><span class="eyebrow">01 / Live telemetry</span><h2>Musashi IV operations overview</h2><span class="panel-subtitle">Track REST acquisition, database writes, and dispenser response values.</span></div></div>
         <section class="live-telemetry">
             <div class="telemetry-grid">
                 <div class="telemetry-card">
@@ -76,8 +96,10 @@
             </div>
         </section>
 
-        <!-- Main Splits: Control & Configuration Split -->
-        <div class="main-layout">
+                </section>
+                <section id="panel-config" class="workspace-panel hidden">
+                    <div class="panel-header"><div><span class="eyebrow">02 / Control surface</span><h2>Configure &amp; operate Musashi IV</h2><span class="panel-subtitle">Edit the REST, database, and runtime controls for the dual-nozzle dispenser.</span></div></div>
+        <div class="workspace-columns">
             <!-- Left Side: Ingestion Control & Config Editor -->
             <section class="config-panel">
                 <!-- Action Controls -->
@@ -352,8 +374,11 @@
                 </div>
             </section>
         </div>
+                </section>
+            </main>
+        </div>
     </div>
 
-    <script src="/static/app.js"></script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

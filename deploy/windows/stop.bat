@@ -9,6 +9,7 @@ set "DAQ_PID_FILE=.daq.pid"
 set "MUSASHI_II_PID_FILE=.musashi_ii.pid"
 set "MUSASHI_IV_PID_FILE=.musashi_iv.pid"
 set "PLOTTER_PID_FILE=.plotter.pid"
+set "INFLUXDB_MGR_PID_FILE=.influxdb_mgr.pid"
 
 echo ==========================================================
 echo          MDDP Ingestion Control Suite Shutdown
@@ -53,6 +54,14 @@ for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr /r /c:":8084 .*LISTENI
     taskkill /f /pid %%a >nul 2>&1
 )
 if exist "%PLOTTER_PID_FILE%" del "%PLOTTER_PID_FILE%"
+
+rem 6. Stop InfluxDB Manager
+echo [SYSTEM] Stopping InfluxDB Manager...
+taskkill /fi "WINDOWTITLE eq MDDP_INFLUXDB_MANAGER*" /t /f >nul 2>&1
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr /r /c:":8085 .*LISTENING"') do (
+    taskkill /f /pid %%a >nul 2>&1
+)
+if exist "%INFLUXDB_MGR_PID_FILE%" del "%INFLUXDB_MGR_PID_FILE%"
 
 echo [SYSTEM] Shutdown sequence completed.
 echo ==========================================================

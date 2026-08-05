@@ -15,7 +15,7 @@ function Write-Log($message) {
     "$timestamp $message" | Out-File -FilePath $LogFile -Append -Encoding utf8
 }
 
-$Ports = @(8080, 8081, 8082, 8083, 8084)
+$Ports = @(8080, 8081, 8082, 8083, 8084, 8085)
 $DownPorts = @()
 
 foreach ($port in $Ports) {
@@ -30,5 +30,5 @@ if ($DownPorts.Count -gt 0) {
     Set-Location $ProjectRoot
     Start-Process -FilePath "cmd.exe" -ArgumentList "/c ""`$ProjectRoot\deploy\windows\run.bat""" -WorkingDirectory $ProjectRoot -WindowStyle Hidden
 } else {
-    Write-Log "[HEARTBEAT] All services UP (8080, 8081, 8083, 8084)"
+    Write-Log "[HEARTBEAT] All services UP (8080, 8081, 8082, 8083, 8084, 8085)"
 }

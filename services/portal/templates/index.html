@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="arctic-light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="MDDP service portal for telemetry control, storage, and visualization consoles.">
+    <title>MDDP Service Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="portal-shell">
+        <header class="portal-header">
+            <div class="brand-lockup">
+                <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+                <div>
+                    <p class="eyebrow">MDDP / CONTROL PLANE</p>
+                    <h1>Service Portal</h1>
+                </div>
+            </div>
+            <div class="host-readout">
+                <span class="readout-label">Portal host</span>
+                <strong id="host-address">--</strong>
+            </div>
+        </header>
+
+        <main>
+            <section class="portal-hero">
+                <div>
+                    <p class="eyebrow">Telemetry operations network</p>
+                    <h2>Choose a service console.</h2>
+                    <p class="hero-copy">Every destination follows the host address used to open this portal. Share one portal URL across the local network and keep each service on its assigned port.</p>
+                </div>
+                <div class="route-display">
+                    <div class="route-heading"><span class="readout-label">Service status</span><button type="button" id="refresh-services">Refresh</button></div>
+                    <code id="route-preview">http://--:8081</code>
+                    <span class="route-note" id="service-summary">Checking service ports...</span>
+                </div>
+            </section>
+
+            <section class="service-grid" aria-label="MDDP services">
+                <a class="service-card service-daq" data-port="8081" href="#">
+                    <div class="service-top"><span class="service-index">01</span><span class="service-status" data-status>CHECKING</span><span class="port-badge">:8081</span></div>
+                    <div class="service-icon" aria-hidden="true">◈</div>
+                    <h3>DAQ USB-4716</h3>
+                    <p>Configure acquisition modes, hardware channels, telemetry destinations, and live ingestion state.</p>
+                    <div class="service-footer"><span>Control console</span><span class="launch-arrow">↗</span></div>
+                </a>
+                <a class="service-card service-musashi" data-port="8082" href="#">
+                    <div class="service-top"><span class="service-index">02</span><span class="service-status" data-status>CHECKING</span><span class="port-badge">:8082</span></div>
+                    <div class="service-icon" aria-hidden="true">⌁</div>
+                    <h3>Musashi II</h3>
+                    <p>Operate serial dispenser acquisition, configure the device connection, and inspect process telemetry.</p>
+                    <div class="service-footer"><span>Control console</span><span class="launch-arrow">↗</span></div>
+                </a>
+                <a class="service-card service-musashi" data-port="8083" href="#">
+                    <div class="service-top"><span class="service-index">03</span><span class="service-status" data-status>CHECKING</span><span class="port-badge">:8083</span></div>
+                    <div class="service-icon" aria-hidden="true">⌁</div>
+                    <h3>Musashi IV</h3>
+                    <p>Monitor HTTP dispenser channels, select the runtime mode, and manage the telemetry stream.</p>
+                    <div class="service-footer"><span>Control console</span><span class="launch-arrow">↗</span></div>
+                </a>
+                <a class="service-card service-plotter" data-port="8084" href="#">
+                    <div class="service-top"><span class="service-index">04</span><span class="service-status" data-status>CHECKING</span><span class="port-badge">:8084</span></div>
+                    <div class="service-icon" aria-hidden="true">⌁</div>
+                    <h3>Database Plotter</h3>
+                    <p>Query stored telemetry by channel and time range in a multi-chart Plotly workspace.</p>
+                    <div class="service-footer"><span>Visualization console</span><span class="launch-arrow">↗</span></div>
+                </a>
+                <a class="service-card service-influx" data-port="8085" href="#">
+                    <div class="service-top"><span class="service-index">05</span><span class="service-status" data-status>CHECKING</span><span class="port-badge">:8085</span></div>
+                    <div class="service-icon" aria-hidden="true">◌</div>
+                    <h3>InfluxDB Manager</h3>
+                    <p>Start the storage container, verify health, synchronize credentials, and apply retention policy.</p>
+                    <div class="service-footer"><span>Storage console</span><span class="launch-arrow">↗</span></div>
+                </a>
+                <a class="service-card service-data" data-port="8086" href="#">
+                    <div class="service-top"><span class="service-index">06</span><span class="service-status" data-status>CHECKING</span><span class="port-badge">:8086</span></div>
+                    <div class="service-icon" aria-hidden="true">▣</div>
+                    <h3>InfluxDB Server</h3>
+                    <p>Open the InfluxDB data plane directly for administration, queries, and server health checks.</p>
+                    <div class="service-footer"><span>Data service</span><span class="launch-arrow">↗</span></div>
+                </a>
+            </section>
+        </main>
+
+        <footer class="portal-footer">
+            <span><i class="signal-dot"></i> Direct links resolve from the current portal host</span>
+            <span class="mono" id="portal-clock">--:--:--</span>
+        </footer>
+    </div>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

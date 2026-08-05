@@ -77,13 +77,14 @@ Launch the MDDP application suite in background mode:
          MDDP Ingestion Control Suite Startup
 ==========================================================
 [SYSTEM] Using Python interpreter: .venv/bin/python
+[SYSTEM] Starting Service Portal on Port 8080 (all interfaces)...
 [SYSTEM] Starting DAQ Control Panel on Port 8081 (all interfaces)...
 [SYSTEM] Starting Musashi II Control Panel on Port 8082 (all interfaces)...
 [SYSTEM] Starting Musashi IV Control Panel on Port 8083 (all interfaces)...
 [SYSTEM] Starting Database Plotter on Port 8084 (all interfaces)...
 [SYSTEM] Starting InfluxDB Manager on Port 8085 (all interfaces)...
 [SYSTEM] Services launched in background.
-[SYSTEM] Accessible locally at http://localhost:8081
+[SYSTEM] Portal:      http://localhost:8080
 [SYSTEM] InfluxDB manager at http://localhost:8085
 ==========================================================
 ```
@@ -155,6 +156,7 @@ Once launched, access the web microservices via your browser:
 
 | Service | Port | URL |
 | :--- | :--- | :--- |
+| **Service Portal** | `8080` | [http://localhost:8080](http://localhost:8080) |
 | **DAQ USB-4716 Panel** | `8081` | [http://localhost:8081](http://localhost:8081) |
 | **Musashi II Panel** | `8082` | [http://localhost:8082](http://localhost:8082) |
 | **Musashi IV Panel** | `8083` | [http://localhost:8083](http://localhost:8083) |
@@ -164,7 +166,7 @@ Once launched, access the web microservices via your browser:
 
 Verify active listening ports:
 ```bash
-lsof -i :8081 -i :8082 -i :8083 -i :8084 -i :8085 -i :8086
+lsof -i :8080 -i :8081 -i :8082 -i :8083 -i :8084 -i :8085 -i :8086
 ```
 
 ---

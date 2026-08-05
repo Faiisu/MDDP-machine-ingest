@@ -201,7 +201,7 @@ Before configuring automatic background operation, verify everything works manua
 deploy\windows\run.bat
 ```
 
-> **Note:** The launcher still contains a legacy portal command for port `8080`, but the current checkout does not include `services\portal`. If that command fails, open the service panels directly on ports `8081`–`8084`. The InfluxDB manager is not started by this launcher; run `python services\influxdb\app.py` separately when required.
+> **Note:** The portal at port `8080` is the entry point for all service consoles. Its links use the current browser host, so a portal opened at `http://192.168.1.20:8080` targets `http://192.168.1.20:8081`, `:8082`, and so on.
 
 **Expected output:**
 ```
@@ -214,6 +214,7 @@ deploy\windows\run.bat
 [SYSTEM] Starting Musashi II Control Panel on Port 8082...
 [SYSTEM] Starting Musashi IV Control Panel on Port 8083...
 [SYSTEM] Starting Database Plotter on Port 8084...
+[SYSTEM] Starting InfluxDB Manager on Port 8085...
 [SYSTEM] Services launched in background.
 [SYSTEM] Logs directory: logs\
 [SYSTEM] Accessible locally at http://localhost:8080
@@ -228,7 +229,7 @@ deploy\windows\run.bat
 
 Check port status:
 ```cmd
-netstat -an | findstr "LISTENING" | findstr "8080 8081 8083 8084"
+netstat -an | findstr "LISTENING" | findstr "8080 8081 8082 8083 8084 8085"
 ```
 
 ### Check Logs
@@ -315,7 +316,7 @@ Open **Task Scheduler** (search "Task Scheduler" in Start menu):
 
 The watchdog script (`watchdog.ps1`) runs every 5 minutes and:
 
-1. **Checks** if each service port (8080, 8081, 8083, 8084) has an active TCP listener
+1. **Checks** if each service port (8080, 8081, 8082, 8083, 8084, 8085) has an active TCP listener
 2. **Restarts** any service that is down by spawning a new background process
 3. **Logs** all actions to `logs\watchdog.log` with timestamps
 
@@ -334,10 +335,10 @@ type logs\watchdog.log
 
 Example output:
 ```
-2026-07-21 23:15:00 [HEARTBEAT] All services UP (8080, 8081, 8083, 8084)
-2026-07-21 23:20:00 [HEARTBEAT] All services UP (8080, 8081, 8083, 8084)
+2026-07-21 23:15:00 [HEARTBEAT] All services UP (8080, 8081, 8082, 8083, 8084, 8085)
+2026-07-21 23:20:00 [HEARTBEAT] All services UP (8080, 8081, 8082, 8083, 8084, 8085)
 2026-07-21 23:25:00 [RESTART] DAQ Panel (8081) was DOWN — restarted
-2026-07-21 23:30:00 [HEARTBEAT] All services UP (8080, 8081, 8083, 8084)
+2026-07-21 23:30:00 [HEARTBEAT] All services UP (8080, 8081, 8082, 8083, 8084, 8085)
 ```
 
 ---
@@ -355,11 +356,17 @@ New-NetFirewallRule -DisplayName "MDDP Portal (8080)" -Direction Inbound -Protoc
 # DAQ Control Panel
 New-NetFirewallRule -DisplayName "MDDP DAQ Panel (8081)" -Direction Inbound -Protocol TCP -LocalPort 8081 -Action Allow
 
+# Musashi II Control Panel
+New-NetFirewallRule -DisplayName "MDDP Musashi II (8082)" -Direction Inbound -Protocol TCP -LocalPort 8082 -Action Allow
+
 # Musashi IV Control Panel
 New-NetFirewallRule -DisplayName "MDDP Musashi IV (8083)" -Direction Inbound -Protocol TCP -LocalPort 8083 -Action Allow
 
 # Database Plotter
 New-NetFirewallRule -DisplayName "MDDP Plotter (8084)" -Direction Inbound -Protocol TCP -LocalPort 8084 -Action Allow
+
+# InfluxDB Manager
+New-NetFirewallRule -DisplayName "MDDP InfluxDB Manager (8085)" -Direction Inbound -Protocol TCP -LocalPort 8085 -Action Allow
 ```
 
 ### Using Windows Defender Firewall GUI
@@ -392,10 +399,12 @@ New-NetFirewallRule -DisplayName "MDDP Plotter (8084)" -Direction Inbound -Proto
 
 | Service | Port | Script |
 |:---|:---|:---|
-| Portal Gateway | 8080 | `python -m http.server 8080 --directory services\portal` |
+| Portal Gateway | 8080 | `services\portal\app.py` |
 | DAQ Control Panel | 8081 | `services\daq_usb4716\app.py` |
+| Musashi II Panel | 8082 | `services\musashi_ii\app.py` |
 | Musashi IV Panel | 8083 | `services\musashi_iv\app.py` |
 | Plotter Visualizer | 8084 | `services\plotter\app.py` |
+| InfluxDB Manager | 8085 | `services\influxdb\app.py` |
 
 ---
 
@@ -405,7 +414,7 @@ New-NetFirewallRule -DisplayName "MDDP Plotter (8084)" -Direction Inbound -Proto
 
 | Log | Path | Contents |
 |:---|:---|:---|
-| Portal Log | `logs\portal.log` | Python http.server log |
+| Portal Log | `logs\portal.log` | Flask portal and service-probe log |
 | DAQ Panel Log | `logs\daq_panel.log` | Flask-SocketIO server log |
 | DAQ Pipeline | `services\daq_usb4716\daq_pipeline.log` | Ingestion pipeline stats & errors |
 | Musashi II Panel | `logs\musashi_ii_panel.log` | Flask-SocketIO server log |
@@ -413,6 +422,7 @@ New-NetFirewallRule -DisplayName "MDDP Plotter (8084)" -Direction Inbound -Proto
 | Musashi IV Panel | `logs\musashi_iv_panel.log` | Flask-SocketIO server log |
 | Musashi Pipeline | `services\musashi_iv\musashi_iv_pipeline.log` | Musashi IV ingestion stats |
 | Plotter Log | `logs\plotter.log` | Flask API server log |
+| InfluxDB Manager | `logs\influxdb_manager.log` | InfluxDB control service log |
 
 ### Log Rotation (Recommended)
 

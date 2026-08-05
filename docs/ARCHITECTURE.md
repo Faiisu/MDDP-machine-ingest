@@ -14,6 +14,7 @@ flowchart TB
     end
 
     subgraph Control[Python control services]
+        PORTAL[Service portal :8080]
         DAQ[DAQ console :8081]
         S2[Musashi II console :8082]
         S4[Musashi IV console :8083]
@@ -27,6 +28,12 @@ flowchart TB
         MQ[(MQTT :1883)]
     end
 
+    PORTAL --> DAQ
+    PORTAL --> S2
+    PORTAL --> S4
+    PORTAL --> PLOT
+    PORTAL --> IM
+    PORTAL --> IN
     USB --> DAQ
     MOCK --> DAQ
     M2 --> S2

@@ -6,6 +6,7 @@ MDDP is a modular control and telemetry platform for Advantech USB-4716 data acq
 
 | Service | Port | Start file | Purpose |
 | --- | ---: | --- | --- |
+| Service portal | `8080` | `services/portal/app.py` | Host-aware entry point and service-status hub. |
 | DAQ USB-4716 console | `8081` | `services/daq_usb4716/app.py` | Configure and control DAQ ingestion. |
 | Musashi II console | `8082` | `services/musashi_ii/app.py` | Configure and control serial dispenser ingestion. |
 | Musashi IV console | `8083` | `services/musashi_iv/app.py` | Configure and control HTTP dispenser ingestion. |
@@ -13,7 +14,7 @@ MDDP is a modular control and telemetry platform for Advantech USB-4716 data acq
 | InfluxDB manager | `8085` | `services/influxdb/app.py` | Manage the InfluxDB container, credentials, retention, and logs. |
 | InfluxDB server | `8086` | Docker Compose | Stores InfluxDB time-series data. |
 
-The Linux launcher starts the five Python services. The current Windows launcher does not start the InfluxDB manager; run `python services/influxdb/app.py` separately when it is needed on Windows.
+Both platform launchers start the portal and the five Python services. Open the portal at `http://{host-ip}:8080`; its cards direct the browser to the same host on each service port.
 
 ## System operation
 
@@ -21,7 +22,7 @@ The Linux launcher starts the five Python services. The current Windows launcher
 flowchart TD
     Start([Start suite]) --> Install[Install dependencies]
     Install --> Configure[Configure device and storage]
-    Configure --> Launch[Launch service consoles]
+    Configure --> Launch[Open portal :8080]
     Launch --> DAQ[Open DAQ console :8081]
     DAQ --> Mode{Select mode}
     Mode -->|Mockup| Mock[Generate synthetic telemetry]
@@ -63,8 +64,9 @@ psql "postgresql://admin:admin@localhost:5432/daq_db" -f scripts/sql/db_setup.sq
 ./deploy/linux/run.sh
 ```
 
-Open the required console:
+Open the portal, then select a service:
 
+- Portal: [http://localhost:8080](http://localhost:8080)
 - DAQ: [http://localhost:8081](http://localhost:8081)
 - Musashi II: [http://localhost:8082](http://localhost:8082)
 - Musashi IV: [http://localhost:8083](http://localhost:8083)
@@ -86,11 +88,7 @@ deploy\windows\install_deps.bat
 deploy\windows\run.bat
 ```
 
-See [`DEPLOY_WINDOWS.md`](DEPLOY_WINDOWS.md) for Task Scheduler, watchdog, firewall, and hardware setup. Start the InfluxDB manager separately when needed:
-
-```cmd
-python services\influxdb\app.py
-```
+See [`DEPLOY_WINDOWS.md`](DEPLOY_WINDOWS.md) for Task Scheduler, watchdog, firewall, and hardware setup. Open [http://localhost:8080](http://localhost:8080) after `run.bat`; the portal links to every service on the current machine IP.
 
 ## InfluxDB setup
 
@@ -200,6 +198,7 @@ Do not commit generated PID files, local logs, production credentials, API token
 ├── docs/                      # Architecture and UI design documentation
 ├── scripts/sql/db_setup.sql   # PostgreSQL/TimescaleDB schema
 ├── services/
+│   ├── portal/                 # Host-aware service portal
 │   ├── daq_usb4716/           # DAQ console and ingestion workers
 │   ├── influxdb/              # InfluxDB manager and UI reference implementation
 │   ├── musashi_ii/            # Serial dispenser console and reader
@@ -217,7 +216,7 @@ Do not commit generated PID files, local logs, production credentials, API token
 Check port conflicts:
 
 ```bash
-lsof -nP -iTCP:8081 -iTCP:8082 -iTCP:8083 -iTCP:8084 -iTCP:8085 -sTCP:LISTEN
+lsof -nP -iTCP:8080 -iTCP:8081 -iTCP:8082 -iTCP:8083 -iTCP:8084 -iTCP:8085 -sTCP:LISTEN
 ```
 
 If DAQ hardware is missing, verify DAQNavi, `DEVICE_DESCRIPTION`, and device permissions, or use mockup mode. If PostgreSQL fails, verify `DB_DSN` and run [`scripts/sql/db_setup.sql`](scripts/sql/db_setup.sql). If InfluxDB is offline, confirm Docker, port `8086`, and the manager's **Runtime logs** panel.
