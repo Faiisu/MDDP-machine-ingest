@@ -6,7 +6,7 @@ rem English comments only
 cd /d "%~dp0..\.."
 
 echo ==========================================================
-echo          MDDP Ingestion Suite - Installing Dependencies
+echo         MDDP Ingestion Suite - Installing Dependencies
 echo ==========================================================
 
 rem 1. Detect uv executable
