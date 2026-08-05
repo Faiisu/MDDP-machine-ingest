@@ -19,10 +19,10 @@
   "DI_START_PORT": 0,
   "ENABLE_AI": false,
   "ENABLE_DI": false,
-  "INFLUX_BUCKET": "daq_telemetry",
-  "INFLUX_MEASUREMENT": "daq_telemetry",
-  "INFLUX_ORG": "mddp",
-  "INFLUX_TOKEN": "my-influx-token",
+  "INFLUX_BUCKET": "sensor_data",
+  "INFLUX_MEASUREMENT": "sensor_1",
+  "INFLUX_ORG": "PTT",
+  "INFLUX_TOKEN": "",
   "INFLUX_URL": "http://localhost:8086",
   "MQTT_BROKER": "localhost",
   "MQTT_CA_CERTS": "",
@@ -38,68 +38,67 @@
   "QUEUE_MAXSIZE": 200,
   "SCALE_CONFIGS": {
     "0": {
-      "stream": false,
       "enabled": true,
-      "low_voltage": 0,
-      "high_voltage": 5,
-      "low_value": -50,
-      "high_value": 50
+      "low_voltage": 0.0,
+      "high_voltage": 5.0,
+      "low_value": -50.0,
+      "high_value": 50.0
     },
     "1": {
-      "stream": false,
       "enabled": false,
-      "low_voltage": 0,
+      "high_value": 100,
       "high_voltage": 50,
       "low_value": 0,
-      "high_value": 100
+      "low_voltage": 0,
+      "stream": false
     },
     "2": {
-      "stream": false,
       "enabled": false,
-      "low_voltage": 0,
+      "high_value": 100,
       "high_voltage": 10,
       "low_value": 0,
-      "high_value": 100
+      "low_voltage": 0,
+      "stream": false
     },
     "3": {
-      "stream": false,
       "enabled": true,
-      "low_voltage": 0,
+      "high_value": 100,
       "high_voltage": 10,
       "low_value": 0,
-      "high_value": 100
+      "low_voltage": 0,
+      "stream": false
     },
     "4": {
-      "stream": false,
       "enabled": false,
-      "low_voltage": 0,
+      "high_value": 100,
       "high_voltage": 10,
       "low_value": 0,
-      "high_value": 100
+      "low_voltage": 0,
+      "stream": false
     },
     "5": {
-      "stream": false,
       "enabled": false,
-      "low_voltage": 0,
+      "high_value": 100,
       "high_voltage": 10,
       "low_value": 0,
-      "high_value": 100
+      "low_voltage": 0,
+      "stream": false
     },
     "6": {
-      "stream": false,
       "enabled": false,
-      "low_voltage": 0,
+      "high_value": 100,
       "high_voltage": 10,
       "low_value": 0,
-      "high_value": 100
+      "low_voltage": 0,
+      "stream": false
     },
     "7": {
-      "stream": false,
       "enabled": false,
-      "low_voltage": 0,
+      "high_value": 100,
       "high_voltage": 10,
       "low_value": 0,
-      "high_value": 100
+      "low_voltage": 0,
+      "stream": false
     }
   },
   "SECTION_COUNT": 0,

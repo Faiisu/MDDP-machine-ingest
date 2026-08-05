@@ -8,31 +8,17 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 cd "$PROJECT_ROOT" || exit 1
 
-PORTAL_PID_FILE=".portal.pid"
 DAQ_PID_FILE=".daq.pid"
 MUSASHI_II_PID_FILE=".musashi_ii.pid"
 MUSASHI_IV_PID_FILE=".musashi_iv.pid"
 PLOTTER_PID_FILE=".plotter.pid"
+INFLUXDB_MGR_PID_FILE=".influxdb_mgr.pid"
 
 echo "=========================================================="
 echo "         MDDP Ingestion Control Suite Shutdown"
 echo "=========================================================="
 
-# 1. Stop Main Portal Gateway
-if [ -f "$PORTAL_PID_FILE" ]; then
-    PID=$(cat "$PORTAL_PID_FILE")
-    if ps -p "$PID" >/dev/null 2>&1; then
-        echo "[SYSTEM] Stopping Ingestion Portal (PID: $PID)..."
-        kill "$PID" 2>/dev/null
-    else
-        echo "[SYSTEM] Ingestion Portal process not found."
-    fi
-    rm "$PORTAL_PID_FILE"
-else
-    echo "[SYSTEM] Ingestion Portal is already stopped."
-fi
-
-# 2. Stop DAQ Control Panel
+# 1. Stop DAQ Control Panel
 if [ -f "$DAQ_PID_FILE" ]; then
     PID=$(cat "$DAQ_PID_FILE")
     if ps -p "$PID" >/dev/null 2>&1; then
@@ -74,7 +60,7 @@ else
     echo "[SYSTEM] Musashi IV Control Panel is already stopped."
 fi
 
-# 4. Stop Telemetry Visualizer
+# 5. Stop Telemetry Visualizer
 if [ -f "$PLOTTER_PID_FILE" ]; then
     PID=$(cat "$PLOTTER_PID_FILE")
     if ps -p "$PID" >/dev/null 2>&1; then
@@ -86,6 +72,20 @@ if [ -f "$PLOTTER_PID_FILE" ]; then
     rm "$PLOTTER_PID_FILE"
 else
     echo "[SYSTEM] Telemetry Visualizer is already stopped."
+fi
+
+# 6. Stop InfluxDB Manager
+if [ -f "$INFLUXDB_MGR_PID_FILE" ]; then
+    PID=$(cat "$INFLUXDB_MGR_PID_FILE")
+    if ps -p "$PID" >/dev/null 2>&1; then
+        echo "[SYSTEM] Stopping InfluxDB Manager (PID: $PID)..."
+        kill "$PID" 2>/dev/null
+    else
+        echo "[SYSTEM] InfluxDB Manager process not found."
+    fi
+    rm "$INFLUXDB_MGR_PID_FILE"
+else
+    echo "[SYSTEM] InfluxDB Manager is already stopped."
 fi
 
 echo "[SYSTEM] Shutdown sequence completed."

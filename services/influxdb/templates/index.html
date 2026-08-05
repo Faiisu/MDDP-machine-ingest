@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InfluxDB Service & Retention Manager</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <header class="main-header">
+            <div class="brand">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                        <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                    </svg>
+                </div>
+                <div class="brand-text">
+                    <h1>INFLUXDB 2.X SERVICE MANAGER</h1>
+                    <span class="sub-text">TIME-SERIES METRICS STORAGE & RETENTION CONTROL</span>
+                </div>
+            </div>
+            <div class="header-status">
+                <div class="status-indicator" id="status-badge-container">
+                    <span class="pulse-dot grey" id="status-dot"></span>
+                    <span class="status-label" id="status-text">CHECKING...</span>
+                </div>
+                <div class="clock-display" id="realtime-clock">--:--:--</div>
+            </div>
+        </header>
+
+        <!-- Main Grid Content -->
+        <main class="workspace-grid">
+
+            <!-- Card 1: Docker Container Control -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+                            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+                            <line x1="6" y1="6" x2="6.01" y2="6"></line>
+                            <line x1="6" y1="18" x2="6.01" y2="18"></line>
+                        </svg>
+                        Docker Container Service (Port 8086)
+                    </div>
+                    <span class="badge badge-cyan" id="container-status-pill">Container: Checking</span>
+                </div>
+                <div class="card-body">
+                    <p class="section-desc">Manage the local <code>influxdb:2</code> Docker container lifecycle. Container state persists independently from ingestion runtime.</p>
+                    
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-success" id="btn-start">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                            Start Container
+                        </button>
+                        <button type="button" class="btn btn-danger" id="btn-stop">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="6" y="6" width="12" height="12"></rect></svg>
+                            Stop Container
+                        </button>
+                        <button type="button" class="btn btn-secondary" id="btn-refresh-status">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                            Check Health
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 2: Database Connection & Credentials -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path>
+                        </svg>
+                        Database Credentials & Connection Setup
+                    </div>
+                </div>
+                <div class="card-body">
+                    <form id="config-form">
+                        <div class="form-row">
+                            <div class="form-group flex-2">
+                                <label for="INFLUX_URL">InfluxDB Server URL</label>
+                                <input type="text" id="INFLUX_URL" name="INFLUX_URL" placeholder="http://localhost:8086" required>
+                            </div>
+                            <div class="form-group flex-1">
+                                <label for="INFLUX_ORG">Organization</label>
+                                <input type="text" id="INFLUX_ORG" name="INFLUX_ORG" placeholder="mddp" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group flex-1">
+                                <label for="INFLUX_BUCKET">Bucket Name</label>
+                                <input type="text" id="INFLUX_BUCKET" name="INFLUX_BUCKET" placeholder="daq_telemetry" required>
+                            </div>
+                            <div class="form-group flex-1">
+                                <label for="INFLUX_MEASUREMENT">Measurement Name</label>
+                                <input type="text" id="INFLUX_MEASUREMENT" name="INFLUX_MEASUREMENT" placeholder="daq_telemetry" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group flex-1">
+                                <label for="INFLUX_USERNAME">Admin Username</label>
+                                <input type="text" id="INFLUX_USERNAME" name="INFLUX_USERNAME" placeholder="admin">
+                            </div>
+                            <div class="form-group flex-1">
+                                <label for="INFLUX_PASSWORD">Admin Password</label>
+                                <input type="password" id="INFLUX_PASSWORD" name="INFLUX_PASSWORD" placeholder="••••••••">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="INFLUX_TOKEN">API Token (Operator / Admin Token)</label>
+                            <div class="input-with-btn">
+                                <input type="text" id="INFLUX_TOKEN" name="INFLUX_TOKEN" class="monospace" placeholder="Auto-discovered or paste token here...">
+                                <button type="button" class="btn btn-sm btn-secondary" id="btn-copy-token" title="Copy Token">📋 Copy</button>
+                            </div>
+                            <span class="help-text">Auto-discovered from Docker container CLI on startup if blank.</span>
+                        </div>
+
+                        <div class="btn-group" style="margin-top: 1rem;">
+                            <button type="submit" class="btn btn-primary" id="btn-save-config">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                                Save Credentials
+                            </button>
+                            <button type="button" class="btn btn-accent" id="btn-sync-daq">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="M7 23l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+                                Sync Token → DAQ Service (Port 8081)
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Card 3: Data Storage & Retention Policy Manager -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        Data Storage Period & Retention Policy
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="retention-toggle-row">
+                        <div class="toggle-info">
+                            <span class="toggle-title">Toggle Auto-Remove Outdated Data</span>
+                            <span class="toggle-sub">Automatically purge telemetry samples older than specified duration</span>
+                        </div>
+                        <label class="toggle-switch switch-cyan">
+                            <input type="checkbox" id="RETENTION_ENABLED">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+
+                    <div id="retention-settings-block" class="retention-inputs-grid">
+                        <div class="duration-input-unit">
+                            <label for="RETENTION_DAYS">Days</label>
+                            <input type="number" id="RETENTION_DAYS" min="0" value="30">
+                        </div>
+                        <div class="duration-input-unit">
+                            <label for="RETENTION_HOURS">Hours</label>
+                            <input type="number" id="RETENTION_HOURS" min="0" max="23" value="0">
+                        </div>
+                        <div class="duration-input-unit">
+                            <label for="RETENTION_MINUTES">Minutes</label>
+                            <input type="number" id="RETENTION_MINUTES" min="0" max="59" value="0">
+                        </div>
+                        <div class="duration-input-unit">
+                            <label for="RETENTION_SECONDS">Seconds</label>
+                            <input type="number" id="RETENTION_SECONDS" min="0" max="59" value="0">
+                        </div>
+                    </div>
+
+                    <div class="retention-summary-box">
+                        <div class="summary-icon">ℹ️</div>
+                        <div class="summary-content">
+                            <div class="summary-text" id="retention-summary-text">Data older than 30 days will be automatically deleted.</div>
+                            <div class="summary-calc monospace" id="retention-total-sec-text">Total Retention Duration: 2,592,000 seconds</div>
+                        </div>
+                    </div>
+
+                    <div class="btn-group" style="margin-top: 1.25rem;">
+                        <button type="button" class="btn btn-primary" id="btn-apply-retention">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            Apply Retention Policy to InfluxDB Bucket
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 4: InfluxDB Container Logs -->
+            <div class="card full-width">
+                <div class="card-header">
+                    <div class="card-title">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="4 17 10 11 4 5"></polyline>
+                            <line x1="12" y1="19" x2="20" y2="19"></line>
+                        </svg>
+                        InfluxDB Docker Output Logs
+                    </div>
+                    <button type="button" class="btn btn-sm btn-secondary" id="btn-refresh-logs">Refresh Logs</button>
+                </div>
+                <div class="card-body">
+                    <div class="terminal-body monospace" id="log-body">
+                        Loading container logs...
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">
+        <span id="toast-message">Notification</span>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

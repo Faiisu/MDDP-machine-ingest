@@ -1,0 +1,15 @@
+{
+  "INFLUX_URL": "http://localhost:8086",
+  "INFLUX_ORG": "PTT",
+  "INFLUX_BUCKET": "sensor_data",
+  "INFLUX_MEASUREMENT": "sensor_1",
+  "INFLUX_USERNAME": "admin",
+  "INFLUX_PASSWORD": "advantech1",
+  "INFLUX_TOKEN": "",
+  "RETENTION_ENABLED": true,
+  "RETENTION_DAYS": 7,
+  "RETENTION_HOURS": 12,
+  "RETENTION_MINUTES": 30,
+  "RETENTION_SECONDS": 0,
+  "RETENTION_TOTAL_SEC": 649800
+}

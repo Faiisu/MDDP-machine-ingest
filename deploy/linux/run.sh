@@ -8,14 +8,15 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 cd "$PROJECT_ROOT" || exit 1
 
-PORTAL_PID_FILE=".portal.pid"
 DAQ_PID_FILE=".daq.pid"
 MUSASHI_II_PID_FILE=".musashi_ii.pid"
 MUSASHI_IV_PID_FILE=".musashi_iv.pid"
 PLOTTER_PID_FILE=".plotter.pid"
 
+INFLUXDB_MGR_PID_FILE=".influxdb_mgr.pid"
+
 # Safeguard check to prevent starting duplicate instances
-if [ -f "$PORTAL_PID_FILE" ] || [ -f "$DAQ_PID_FILE" ] || [ -f "$MUSASHI_II_PID_FILE" ] || [ -f "$MUSASHI_IV_PID_FILE" ] || [ -f "$PLOTTER_PID_FILE" ]; then
+if [ -f "$DAQ_PID_FILE" ] || [ -f "$MUSASHI_II_PID_FILE" ] || [ -f "$MUSASHI_IV_PID_FILE" ] || [ -f "$PLOTTER_PID_FILE" ] || [ -f "$INFLUXDB_MGR_PID_FILE" ]; then
     echo "[SYSTEM] Warning: PID files detected. Services may already be running."
     echo "[SYSTEM] Please run ./deploy/linux/stop.sh before starting again."
     exit 1
@@ -47,12 +48,7 @@ echo "=========================================================="
 echo "         MDDP Ingestion Control Suite Startup"
 echo "=========================================================="
 
-# 1. Start Main Portal Gateway (Port 8080)
-echo "[SYSTEM] Starting Ingestion Portal on Port 8080 (all interfaces)..."
-nohup $PYTHON_BIN -m http.server 8080 --directory services/portal >/dev/null 2>&1 &
-echo $! > "$PORTAL_PID_FILE"
-
-# 2. Start DAQ USB-4716 Control Panel (Port 8081)
+# 1. Start DAQ USB-4716 Control Panel (Port 8081)
 echo "[SYSTEM] Starting DAQ Control Panel on Port 8081 (all interfaces)..."
 nohup $PYTHON_BIN services/daq_usb4716/app.py >/dev/null 2>&1 &
 echo $! > "$DAQ_PID_FILE"
@@ -72,7 +68,15 @@ echo "[SYSTEM] Starting Database Plotter on Port 8084 (all interfaces)..."
 nohup $PYTHON_BIN services/plotter/app.py >/dev/null 2>&1 &
 echo $! > "$PLOTTER_PID_FILE"
 
+# 6. Start InfluxDB Manager (Port 8085)
+echo "[SYSTEM] Starting InfluxDB Manager on Port 8085 (all interfaces)..."
+nohup $PYTHON_BIN services/influxdb/app.py >/dev/null 2>&1 &
+echo $! > "$INFLUXDB_MGR_PID_FILE"
+
 echo "[SYSTEM] Services launched in background."
-echo "[SYSTEM] Accessible locally at http://localhost:8080"
-echo "[SYSTEM] Accessible network-wide at http://<HOST_IP>:8080"
+echo "[SYSTEM] DAQ Control: http://localhost:8081"
+echo "[SYSTEM] Musashi II:  http://localhost:8082"
+echo "[SYSTEM] Musashi IV:  http://localhost:8083"
+echo "[SYSTEM] Plotter:     http://localhost:8084"
+echo "[SYSTEM] InfluxDB:    http://localhost:8085"
 echo "=========================================================="
