@@ -5,46 +5,47 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 
-:root {
-    /* Surface Layers - Light/Arctic Theme */
-    --bg-void:    #F4F5F7;
-    --bg-rack:    #FFFFFF;
-    --bg-panel:   #F9FAFC;
-    --bg-inset:   #EBECF0;
-    --bg-overlay: rgba(244, 245, 247, 0.92);
+:root,
+[data-theme="dark-ocean"] {
+    /* Surface Layers - Dark Ocean / Cockpit Theme (Default) */
+    --bg-void:    #07090e;                  /* Void / Canvas background */
+    --bg-rack:    #0d1117;                  /* Rack container background */
+    --bg-panel:   #111622;                  /* Panel background */
+    --bg-inset:   #090c12;                  /* Inset cards / inputs background */
+    --bg-overlay: rgba(7, 9, 14, 0.92);     /* Modal backdrop */
 
-    /* Arctic Minimal Accent Palette */
-    --accent-blue:        #0052CC;
-    --accent-blue-dim:    #0747A6;
-    --accent-blue-muted:  rgba(0, 82, 204, 0.08);
-    --accent-blue-rgb:    0, 82, 204;
+    /* Phosphor Accent Palette */
+    --accent-blue:        #00f2fe;          /* Phosphor Cyan Blue */
+    --accent-blue-dim:    #00a8cc;          /* Dimmed Cyan Accent */
+    --accent-blue-muted:  rgba(0, 242, 254, 0.08);
+    --accent-blue-rgb:    0, 242, 254;
 
-    --amber:     #FF8B00;
-    --amber-dim: #C25100;
-    --amber-rgb: 255, 139, 0;
+    --amber:     #ffb703;                   /* Warning Amber Gold */
+    --amber-dim: #d48800;
+    --amber-rgb: 255, 183, 3;
 
-    --red:     #DE350B;
-    --red-dim: #BF2600;
+    --red:     #ff4757;                     /* Alert Red */
+    --red-dim: #d63031;
 
-    --slate:      #5E6C84;
-    --slate-dim:  #42526E;
+    --slate:      #94a3b8;
+    --slate-dim:  #64748b;
 
-    /* Text */
-    --text-bright:    #091E42;
-    --text-primary:   #172B4D;
-    --text-secondary: #5E6C84;
-    --text-muted:     #7A869A;
+    /* Text - High Contrast for Dark Theme */
+    --text-bright:    #ffffff;              /* Bright headers / values */
+    --text-primary:   #f8fafc;              /* Primary text */
+    --text-secondary: #cbd5e1;              /* Secondary labels */
+    --text-muted:     #64748b;              /* Muted captions */
 
     /* Borders */
-    --border-rack:   #DFE1E6;
-    --border-panel:  #EBECF0;
-    --border-active: #0052CC;
-    --border-struct: #DFE1E6;
+    --border-rack:   rgba(38, 45, 61, 0.8);
+    --border-panel:  rgba(38, 45, 61, 0.6);
+    --border-active: #00f2fe;
+    --border-struct: rgba(38, 45, 61, 0.5);
 
-    /* Glows - Much softer for light theme */
-    --glow-blue:  0 0 8px rgba(0, 82, 204, 0.15);
-    --glow-amber: 0 0 8px rgba(255, 139, 0, 0.15);
-    --glow-red:   0 0 8px rgba(222, 53, 11, 0.15);
+    /* Glows */
+    --glow-blue:  0 0 12px rgba(0, 242, 254, 0.25);
+    --glow-amber: 0 0 12px rgba(255, 183, 3, 0.25);
+    --glow-red:   0 0 12px rgba(255, 71, 87, 0.3);
 
     /* Type Scale */
     --font-display: 'Space Grotesk', system-ui, sans-serif;
@@ -52,6 +53,126 @@
 
     /* Motion */
     --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-theme="emerald-matrix"] {
+    --bg-void:    #060d08;
+    --bg-rack:    #0a140d;
+    --bg-panel:   #0d1a11;
+    --bg-inset:   #071009;
+    --bg-overlay: rgba(6, 13, 8, 0.92);
+    --accent-blue:        #10b981;
+    --accent-blue-dim:    #059669;
+    --accent-blue-muted:  rgba(16, 185, 129, 0.08);
+    --accent-blue-rgb:    16, 185, 129;
+    --amber:     #f59e0b;
+    --amber-dim: #d97706;
+    --amber-rgb: 245, 158, 11;
+    --red:       #ef4444;
+    --red-dim:   #dc2626;
+    --slate:     #a7f3d0;
+    --slate-dim: #6ee7b7;
+    --text-bright:    #ffffff;
+    --text-primary:   #ecfdf5;
+    --text-secondary: #a7f3d0;
+    --text-muted:     #059669;
+    --border-rack:   rgba(16, 185, 129, 0.35);
+    --border-panel:  rgba(16, 185, 129, 0.25);
+    --border-active: #10b981;
+    --border-struct: rgba(16, 185, 129, 0.2);
+    --glow-blue:  0 0 12px rgba(16, 185, 129, 0.3);
+    --glow-amber: 0 0 12px rgba(245, 158, 11, 0.3);
+    --glow-red:   0 0 12px rgba(239, 68, 68, 0.3);
+}
+
+[data-theme="amber-cockpit"] {
+    --bg-void:    #0d0b07;
+    --bg-rack:    #17130c;
+    --bg-panel:   #1f1a10;
+    --bg-inset:   #100d07;
+    --bg-overlay: rgba(13, 11, 7, 0.92);
+    --accent-blue:        #ffb703;
+    --accent-blue-dim:    #d48800;
+    --accent-blue-muted:  rgba(255, 183, 3, 0.08);
+    --accent-blue-rgb:    255, 183, 3;
+    --amber:     #fbbf24;
+    --amber-dim: #d97706;
+    --amber-rgb: 251, 191, 36;
+    --red:       #f87171;
+    --red-dim:   #dc2626;
+    --slate:     #fde68a;
+    --slate-dim: #f59e0b;
+    --text-bright:    #ffffff;
+    --text-primary:   #fffbeb;
+    --text-secondary: #fde68a;
+    --text-muted:     #b45309;
+    --border-rack:   rgba(255, 183, 3, 0.35);
+    --border-panel:  rgba(255, 183, 3, 0.25);
+    --border-active: #ffb703;
+    --border-struct: rgba(255, 183, 3, 0.2);
+    --glow-blue:  0 0 12px rgba(255, 183, 3, 0.3);
+    --glow-amber: 0 0 12px rgba(251, 191, 36, 0.3);
+    --glow-red:   0 0 12px rgba(248, 113, 113, 0.3);
+}
+
+[data-theme="dracula"] {
+    --bg-void:    #21222c;
+    --bg-rack:    #282a36;
+    --bg-panel:   #343746;
+    --bg-inset:   #1e1f29;
+    --bg-overlay: rgba(33, 34, 44, 0.92);
+    --accent-blue:        #8be9fd;
+    --accent-blue-dim:    #bd93f9;
+    --accent-blue-muted:  rgba(139, 233, 253, 0.1);
+    --accent-blue-rgb:    139, 233, 253;
+    --amber:     #ffb86c;
+    --amber-dim: #ff79c6;
+    --amber-rgb: 255, 184, 108;
+    --red:       #ff5555;
+    --red-dim:   #ff5555;
+    --slate:     #f8f8f2;
+    --slate-dim: #6272a4;
+    --text-bright:    #ffffff;
+    --text-primary:   #f8f8f2;
+    --text-secondary: #bd93f9;
+    --text-muted:     #6272a4;
+    --border-rack:   #44475a;
+    --border-panel:  #44475a;
+    --border-active: #8be9fd;
+    --border-struct: #44475a;
+    --glow-blue:  0 0 12px rgba(139, 233, 253, 0.3);
+    --glow-amber: 0 0 12px rgba(255, 184, 108, 0.3);
+    --glow-red:   0 0 12px rgba(255, 85, 85, 0.3);
+}
+
+[data-theme="arctic-light"] {
+    --bg-void:    #f4f5f7;
+    --bg-rack:    #ffffff;
+    --bg-panel:   #f9fafc;
+    --bg-inset:   #ebecf0;
+    --bg-overlay: rgba(244, 245, 247, 0.92);
+    --accent-blue:        #0052cc;
+    --accent-blue-dim:    #0747a6;
+    --accent-blue-muted:  rgba(0, 82, 204, 0.08);
+    --accent-blue-rgb:    0, 82, 204;
+    --amber:     #ff8b00;
+    --amber-dim: #c25100;
+    --amber-rgb: 255, 139, 0;
+    --red:       #de350b;
+    --red-dim:   #bf2600;
+    --slate:     #5e6c84;
+    --slate-dim: #42526e;
+    --text-bright:    #091e42;
+    --text-primary:   #172b4d;
+    --text-secondary: #5e6c84;
+    --text-muted:     #7a869a;
+    --border-rack:   #dfe1e6;
+    --border-panel:  #ebecf0;
+    --border-active: #0052cc;
+    --border-struct: #dfe1e6;
+    --glow-blue:  0 0 8px rgba(0, 82, 204, 0.15);
+    --glow-amber: 0 0 8px rgba(255, 139, 0, 0.15);
+    --glow-red:   0 0 8px rgba(222, 53, 11, 0.15);
 }
 
 /* ─── Reset ─────────────────────────────────────────────── */
@@ -238,6 +359,36 @@ body::before {
     letter-spacing: 0.1em;
     color: var(--text-secondary);
     text-transform: uppercase;
+}
+
+.theme-selector-wrap {
+    display: flex;
+    align-items: center;
+}
+
+.theme-select-dropdown {
+    background: var(--bg-inset);
+    border: 1px solid var(--border-struct);
+    border-radius: 3px;
+    color: var(--accent-blue);
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 0.25rem 1.5rem 0.25rem 0.55rem;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.15s;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2300f2fe' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.45rem center;
+}
+
+.theme-select-dropdown:hover,
+.theme-select-dropdown:focus {
+    border-color: var(--accent-blue);
+    box-shadow: var(--glow-blue);
 }
 
 .clock-display {
@@ -552,6 +703,11 @@ select:focus,
 .mode-select:focus {
     border-color: var(--accent-blue-dim);
     box-shadow: 0 0 0 1px rgba(0, 195, 255, 0.15);
+}
+
+select option {
+    background-color: var(--bg-rack);
+    color: var(--text-primary);
 }
 
 /* Checkbox */

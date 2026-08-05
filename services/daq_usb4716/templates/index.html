@@ -29,10 +29,15 @@
                     <span class="sub-text">MDDP Data Ingestion Suite · Advantech Hardware Interface</span>
                 </div>
             </div>
-            <div class="header-status">
-                <div class="header-signal-visualizer">
-                    <span class="signal-label">Signal Trace</span>
-                    <canvas id="signal-canvas" width="180" height="28"></canvas>
+            <div class="header-status">                
+                <div class="theme-selector-wrap">
+                    <select id="ui-theme-select" class="theme-select-dropdown" title="Select Interface Theme" aria-label="Interface Theme">
+                        <option value="arctic-light">Arctic Light</option>
+                        <option value="dark-ocean">Deep Ocean</option>
+                        <option value="emerald-matrix">Emerald Matrix</option>
+                        <option value="amber-cockpit">Amber Cockpit</option>
+                        <option value="dracula">Dracula Dark</option>
+                    </select>
                 </div>
                 <div class="status-indicator" id="system-status-indicator">
                     <span class="pulse-dot offline" id="status-dot"></span>
@@ -70,7 +75,7 @@
 
             <!-- Main Workspace -->
             <main class="workspace-card">
-                <form id="config-form" class="config-form">
+                <form id="config-form" class="config-form" novalidate>
 
                     <!-- PANEL 1: Process, Automation, Telemetry & Controls -->
                     <div id="panel-main" class="workspace-panel">
@@ -197,6 +202,10 @@
 
                     <!-- PANEL 2: Hardware & Sampling + Channel Matrix -->
                     <div id="panel-hardware" class="workspace-panel hidden">
+                        <input type="hidden" id="ENABLE_AI" name="ENABLE_AI" value="true">
+                        <input type="hidden" id="ENABLE_DI" name="ENABLE_DI" value="true">
+                        <input type="hidden" id="CHANNEL_COUNT" name="CHANNEL_COUNT" value="8">
+                        <input type="hidden" id="START_CHANNEL" name="START_CHANNEL" value="0">
                         <div class="panel-header">
                             <div>
                                 <h2>Hardware &amp; Sampling Configuration</h2>

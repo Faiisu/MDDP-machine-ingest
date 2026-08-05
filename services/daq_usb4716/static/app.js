@@ -8,6 +8,9 @@ let scaleConfigs = {};
 let currentScaleChannel = '0';
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Initialize Theme Selector
+    initThemeSelector();
+
     // Start clock thread
     updateClock();
     setInterval(updateClock, 1000);
@@ -21,8 +24,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('config-form');
     form.addEventListener('submit', handleConfigSave);
 
-    // Setup Sidebar Tab Navigation
+    // Setup Sidebar Tab Navigation — persist active panel in localStorage
     const sidebarBtns = document.querySelectorAll('#sidebar-tab-list .nav-tab-btn');
+    const savedPanel = localStorage.getItem('daq_active_panel');
+    if (savedPanel) {
+        sidebarBtns.forEach(b => b.classList.toggle('active', b.dataset.panel === savedPanel));
+        document.querySelectorAll('.workspace-panel').forEach(panel => {
+            panel.classList.toggle('hidden', panel.id !== savedPanel);
+        });
+    }
     sidebarBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             sidebarBtns.forEach(b => b.classList.remove('active'));
@@ -31,6 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('.workspace-panel').forEach(panel => {
                 panel.classList.toggle('hidden', panel.id !== panelId);
             });
+            localStorage.setItem('daq_active_panel', panelId);
         });
     });
 
@@ -342,6 +353,8 @@ function checkDirtyState() {
         let newVal;
         if (el.type === 'checkbox') {
             newVal = el.checked;
+        } else if (['ENABLE_AI', 'ENABLE_DI'].includes(el.name)) {
+            newVal = (el.value === 'true' || el.checked === true);
         } else if (el.name === 'ANCHOR_RECALIBRATE_INTERVAL_HR') {
             newVal = parseFloat(el.value);
         } else if (['START_CHANNEL', 'CHANNEL_COUNT', 'CLOCK_RATE', 'SECTION_LENGTH', 'SECTION_COUNT', 'QUEUE_MAXSIZE', 'DB_PAGE_SIZE', 'STATS_INTERVAL_SEC', 'MQTT_PORT', 'MQTT_QOS', 'DI_START_PORT', 'DI_PORT_COUNT', 'DI_CHANNEL_OFFSET'].includes(el.name)) {
@@ -350,20 +363,25 @@ function checkDirtyState() {
             newVal = el.value;
         }
 
-        if (oldVal !== undefined && String(oldVal) !== String(newVal)) {
+        const normOld = oldVal === undefined ? '' : String(oldVal);
+        const normNew = (newVal === undefined || Number.isNaN(newVal)) ? '' : String(newVal);
+
+        if (normOld !== normNew) {
             isDirty = true;
             break;
         }
     }
 
-    // Check scale configs
-    if (!isDirty && activeServerConfig.SCALE_CONFIGS) {
-        const oldScales = activeServerConfig.SCALE_CONFIGS;
+    // Check scale configs (including stream toggle state)
+    if (!isDirty) {
+        const oldScales = activeServerConfig.SCALE_CONFIGS || {};
         for (let ch of Object.keys(matrixScales)) {
             const oldCh = oldScales[ch] || {};
             const newCh = matrixScales[ch] || {};
-            for (let f of ['enabled', 'low_voltage', 'high_voltage', 'low_value', 'high_value']) {
-                if (oldCh[f] !== undefined && String(oldCh[f]) !== String(newCh[f])) {
+            for (let f of ['stream', 'enabled', 'low_voltage', 'high_voltage', 'low_value', 'high_value']) {
+                const normOld = oldCh[f] === undefined ? '' : String(oldCh[f]);
+                const normNew = newCh[f] === undefined ? '' : String(newCh[f]);
+                if (normOld !== normNew) {
                     isDirty = true;
                     break;
                 }
@@ -442,26 +460,32 @@ function updateUIState(running, mode = 'mockup', destination = 'database') {
 
 // Intercept form submissions and open Tactical Config Audit Modal
 async function handleConfigSave(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
     
     // Collect matrix table scale configurations & sampling parameters
     const matrixScales = collectScaleConfigsFromMatrixTable();
     updateGlobalSamplingFromTable();
     
+    // Deep clone activeServerConfig as base payload to prevent losing unrendered keys
+    const configData = JSON.parse(JSON.stringify(activeServerConfig || {}));
+    
     const form = document.getElementById('config-form');
     const inputs = form ? form.querySelectorAll('input[name], select[name]') : document.querySelectorAll('input[name], select[name]');
     
-    const configData = {};
-    // Parse form fields manually to support checkboxes, integers, and custom keys
+    // Parse form fields manually to support checkboxes, integers, floats, and text
     for (let el of inputs) {
         if (!el.name) continue;
         
         if (el.type === 'checkbox') {
             configData[el.name] = el.checked;
+        } else if (['ENABLE_AI', 'ENABLE_DI'].includes(el.name)) {
+            configData[el.name] = (el.value === 'true' || el.checked === true);
         } else if (el.name === 'ANCHOR_RECALIBRATE_INTERVAL_HR') {
-            configData[el.name] = parseFloat(el.value);
+            const val = parseFloat(el.value);
+            configData[el.name] = isNaN(val) ? 24.0 : val;
         } else if (['START_CHANNEL', 'CHANNEL_COUNT', 'CLOCK_RATE', 'SECTION_LENGTH', 'SECTION_COUNT', 'QUEUE_MAXSIZE', 'DB_PAGE_SIZE', 'STATS_INTERVAL_SEC', 'MQTT_PORT', 'MQTT_QOS', 'DI_START_PORT', 'DI_PORT_COUNT', 'DI_CHANNEL_OFFSET'].includes(el.name)) {
-            configData[el.name] = parseInt(el.value, 10);
+            const val = parseInt(el.value, 10);
+            configData[el.name] = isNaN(val) ? (activeServerConfig[el.name] ?? 0) : val;
         } else {
             configData[el.name] = el.value;
         }
@@ -491,17 +515,20 @@ function openConfirmAuditModal(newConfig) {
             Object.keys(newScales).forEach(ch => {
                 const oldCh = oldScales[ch] || {};
                 const newCh = newScales[ch] || {};
-                ['enabled', 'low_voltage', 'high_voltage', 'low_value', 'high_value'].forEach(f => {
-                    if (oldCh[f] !== undefined && String(oldCh[f]) !== String(newCh[f])) {
+                ['stream', 'enabled', 'low_voltage', 'high_voltage', 'low_value', 'high_value'].forEach(f => {
+                    const normOld = oldCh[f] === undefined ? '(none)' : String(oldCh[f]);
+                    const normNew = newCh[f] === undefined ? '(none)' : String(newCh[f]);
+                    if (normOld !== normNew) {
                         diffCount++;
                         const item = document.createElement('div');
                         item.className = 'diff-item';
+                        const label = f === 'stream' ? `AI ${ch} Stream` : `AI ${ch} Scale (${f})`;
                         item.innerHTML = `
-                            <span class="diff-key">AI ${ch} Scale (${f})</span>
+                            <span class="diff-key">${label}</span>
                             <div class="diff-vals">
-                                <span class="diff-old">${oldCh[f]}</span>
+                                <span class="diff-old">${normOld}</span>
                                 <span class="diff-arrow">&rarr;</span>
-                                <span class="diff-new">${newCh[f]}</span>
+                                <span class="diff-new">${normNew}</span>
                             </div>
                         `;
                         diffContainer.appendChild(item);
@@ -513,16 +540,19 @@ function openConfirmAuditModal(newConfig) {
 
         const oldVal = activeServerConfig[key];
         const newVal = newConfig[key];
-        if (oldVal !== undefined && String(oldVal) !== String(newVal)) {
+        const normOld = oldVal === undefined ? '(none)' : String(oldVal);
+        const normNew = newVal === undefined ? '(none)' : String(newVal);
+
+        if (normOld !== normNew) {
             diffCount++;
             const item = document.createElement('div');
             item.className = 'diff-item';
             item.innerHTML = `
                 <span class="diff-key">${key}</span>
                 <div class="diff-vals">
-                    <span class="diff-old">${oldVal}</span>
+                    <span class="diff-old">${normOld}</span>
                     <span class="diff-arrow">&rarr;</span>
-                    <span class="diff-new">${newVal}</span>
+                    <span class="diff-new">${normNew}</span>
                 </div>
             `;
             diffContainer.appendChild(item);
@@ -530,7 +560,7 @@ function openConfirmAuditModal(newConfig) {
     });
 
     if (diffCount === 0) {
-        diffContainer.innerHTML = '<div class="no-diff-msg">No parameters modified. (Direct commit will re-save current configuration)</div>';
+        diffContainer.innerHTML = '<div class="no-diff-msg" style="padding:0.75rem 0.85rem;color:var(--text-muted);">No parameters modified. Click "Confirm & Write to Disk" to re-save current configuration.</div>';
     }
 
     if (countBadge) countBadge.textContent = `${diffCount} CHANGES`;
@@ -570,6 +600,13 @@ async function commitConfigToBackend() {
         closeConfirmAuditModal();
         showToast("Configuration written to disk successfully.");
         appendLog('SUCCESS', 'Configuration audit approved and committed to config.json.');
+
+        // Re-render matrix table so stream toggles reflect newly saved values
+        scaleConfigs = payload.SCALE_CONFIGS || {};
+        renderIngestionMatrixTable(payload);
+        toggleSamplingFields();
+        updateDataSizeEstimator();
+        checkDirtyState();
 
         // Show Save Status Confirmation Badges across all panels
         const now = new Date();
@@ -706,8 +743,9 @@ function renderIngestionMatrixTable(config) {
 
     // 1. Render Analog Input (AI) Rows (0 to 7)
     for (let i = 0; i < 8; i++) {
-        const scaleCfg = scaleConfigs[String(i)] || { enabled: false, low_voltage: 0.0, high_voltage: 10.0, low_value: 0.0, high_value: 100.0 };
-        const isIngestActive = enableAi && (i < channelCount);
+        const scaleCfg = scaleConfigs[String(i)] || { stream: false, enabled: false, low_voltage: 0.0, high_voltage: 10.0, low_value: 0.0, high_value: 100.0 };
+        // Per-channel stream state: use scaleCfg.stream if present, else fall back to range check
+        const isIngestActive = enableAi && (scaleCfg.stream !== undefined ? scaleCfg.stream : (i < channelCount));
         
         const tr = document.createElement('tr');
         tr.className = `row-ai ${isIngestActive ? '' : 'row-disabled'}`;
@@ -789,6 +827,7 @@ function bindMatrixTableEvents() {
             const tr = e.target.closest('tr');
             if (tr) tr.classList.toggle('row-disabled', !e.target.checked);
             updateGlobalSamplingFromTable();
+            checkDirtyState();
         });
     });
 
@@ -798,6 +837,7 @@ function bindMatrixTableEvents() {
             const tr = e.target.closest('tr');
             if (tr) tr.classList.toggle('row-disabled', !e.target.checked);
             updateGlobalSamplingFromTable();
+            checkDirtyState();
         });
     });
 
@@ -814,29 +854,34 @@ function bindMatrixTableEvents() {
             }
             if (!scaleConfigs[ch]) scaleConfigs[ch] = {};
             scaleConfigs[ch].enabled = isChecked;
+            checkDirtyState();
         });
     });
 
     // Input changes update scaleConfigs in memory
     tbody.querySelectorAll('.table-input').forEach(input => {
-        input.addEventListener('input', (e) => {
+        const handleTableInput = (e) => {
             const ch = e.target.dataset.ch;
             const tr = e.target.closest('tr');
             if (!tr) return;
             const enabled = tr.querySelector('.scale-toggle-ai')?.checked || false;
-            const low_volt = parseFloat(tr.querySelector('.scale-low-volt')?.value) || 0.0;
-            const high_volt = parseFloat(tr.querySelector('.scale-high-volt')?.value) || 10.0;
-            const low_val = parseFloat(tr.querySelector('.scale-low-val')?.value) || 0.0;
-            const high_val = parseFloat(tr.querySelector('.scale-high-val')?.value) || 100.0;
+            const lowVoltVal = tr.querySelector('.scale-low-volt')?.value;
+            const highVoltVal = tr.querySelector('.scale-high-volt')?.value;
+            const lowValVal = tr.querySelector('.scale-low-val')?.value;
+            const highValVal = tr.querySelector('.scale-high-val')?.value;
 
             scaleConfigs[ch] = {
                 enabled: enabled,
-                low_voltage: low_volt,
-                high_voltage: high_volt,
-                low_value: low_val,
-                high_value: high_val
+                low_voltage: (lowVoltVal !== '' && !isNaN(parseFloat(lowVoltVal))) ? parseFloat(lowVoltVal) : 0.0,
+                high_voltage: (highVoltVal !== '' && !isNaN(parseFloat(highVoltVal))) ? parseFloat(highVoltVal) : 10.0,
+                low_value: (lowValVal !== '' && !isNaN(parseFloat(lowValVal))) ? parseFloat(lowValVal) : 0.0,
+                high_value: (highValVal !== '' && !isNaN(parseFloat(highValVal))) ? parseFloat(highValVal) : 100.0
             };
-        });
+            checkDirtyState();
+        };
+
+        input.addEventListener('input', handleTableInput);
+        input.addEventListener('change', handleTableInput);
     });
 
     // Tab filter buttons
@@ -865,18 +910,27 @@ function updateGlobalSamplingFromTable() {
     const aiSwitches = document.querySelectorAll('.ingest-toggle-ai');
     let maxAiCh = -1;
     let anyAiActive = false;
-    aiSwitches.forEach((sw, idx) => {
+    aiSwitches.forEach((sw) => {
+        const chNum = parseInt(sw.dataset.ch ?? '0', 10);
+        // Keep scaleConfigs stream state in sync with toggle
+        if (!scaleConfigs[String(chNum)]) scaleConfigs[String(chNum)] = {};
+        scaleConfigs[String(chNum)].stream = sw.checked;
         if (sw.checked) {
             anyAiActive = true;
-            if (idx > maxAiCh) maxAiCh = idx;
+            if (!isNaN(chNum) && chNum > maxAiCh) maxAiCh = chNum;
         }
     });
 
     const enableAiEl = document.getElementById('ENABLE_AI');
-    if (enableAiEl) enableAiEl.checked = anyAiActive;
+    if (enableAiEl) {
+        enableAiEl.checked = anyAiActive;
+        enableAiEl.value = String(anyAiActive);
+    }
 
     const chCountEl = document.getElementById('CHANNEL_COUNT');
-    if (chCountEl && maxAiCh >= 0) chCountEl.value = maxAiCh + 1;
+    if (chCountEl) {
+        chCountEl.value = String(anyAiActive ? (maxAiCh + 1) : 0);
+    }
 
     const diSwitches = document.querySelectorAll('.ingest-toggle-di');
     let anyDiActive = false;
@@ -885,7 +939,10 @@ function updateGlobalSamplingFromTable() {
     });
 
     const enableDiEl = document.getElementById('ENABLE_DI');
-    if (enableDiEl) enableDiEl.checked = anyDiActive;
+    if (enableDiEl) {
+        enableDiEl.checked = anyDiActive;
+        enableDiEl.value = String(anyDiActive);
+    }
 
     updateDataSizeEstimator();
 }
@@ -948,18 +1005,21 @@ function collectScaleConfigsFromMatrixTable() {
 
     tbody.querySelectorAll('tr.row-ai').forEach(tr => {
         const ch = tr.dataset.ch;
+        const streamToggle = tr.querySelector('.ingest-toggle-ai');
+        const isStreaming = streamToggle ? streamToggle.checked : false;
         const enabled = tr.querySelector('.scale-toggle-ai')?.checked || false;
-        const low_volt = parseFloat(tr.querySelector('.scale-low-volt')?.value) || 0.0;
-        const high_volt = parseFloat(tr.querySelector('.scale-high-volt')?.value) || 10.0;
-        const low_val = parseFloat(tr.querySelector('.scale-low-val')?.value) || 0.0;
-        const high_val = parseFloat(tr.querySelector('.scale-high-val')?.value) || 100.0;
+        const lowVoltVal = tr.querySelector('.scale-low-volt')?.value;
+        const highVoltVal = tr.querySelector('.scale-high-volt')?.value;
+        const lowValVal = tr.querySelector('.scale-low-val')?.value;
+        const highValVal = tr.querySelector('.scale-high-val')?.value;
 
         scaleConfigs[ch] = {
+            stream: isStreaming,
             enabled: enabled,
-            low_voltage: low_volt,
-            high_voltage: high_volt,
-            low_value: low_val,
-            high_value: high_val
+            low_voltage: (lowVoltVal !== '' && !isNaN(parseFloat(lowVoltVal))) ? parseFloat(lowVoltVal) : 0.0,
+            high_voltage: (highVoltVal !== '' && !isNaN(parseFloat(highVoltVal))) ? parseFloat(highVoltVal) : 10.0,
+            low_value: (lowValVal !== '' && !isNaN(parseFloat(lowValVal))) ? parseFloat(lowValVal) : 0.0,
+            high_value: (highValVal !== '' && !isNaN(parseFloat(highValVal))) ? parseFloat(highValVal) : 100.0
         };
     });
 
@@ -978,4 +1038,22 @@ function resolveBackLink() {
             window.location.href = targetUrl;
         });
     }
+}
+
+// UI Theme Selector & Persistence
+function initThemeSelector() {
+    const themeSelect = document.getElementById('ui-theme-select');
+    if (!themeSelect) return;
+
+    const savedTheme = localStorage.getItem('daq_ui_theme') || 'dark-ocean';
+    themeSelect.value = savedTheme;
+    document.documentElement.setAttribute('data-theme', savedTheme);
+
+    themeSelect.addEventListener('change', (e) => {
+        const theme = e.target.value;
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('daq_ui_theme', theme);
+        const themeLabel = themeSelect.options[themeSelect.selectedIndex].text;
+        showToast(`Theme switched to ${themeLabel}`);
+    });
 }
