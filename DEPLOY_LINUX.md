@@ -23,7 +23,7 @@ This document provides step-by-step instructions for deploying the MDDP Ingestio
 
 Before starting deployment on Linux, ensure the following are installed:
 
-- **Python** (v3.9 or higher)
+- **Python** (v3.12 or higher)
 - **uv** (Recommended package manager) or standard `python3-venv` + `pip`
 - **Git** (to clone repository)
 - **Advantech DAQNavi SDK for Linux** (for real USB-4716 hardware mode)
@@ -77,14 +77,14 @@ Launch the MDDP application suite in background mode:
          MDDP Ingestion Control Suite Startup
 ==========================================================
 [SYSTEM] Using Python interpreter: .venv/bin/python
-[SYSTEM] Starting Ingestion Portal on Port 8080 (all interfaces)...
 [SYSTEM] Starting DAQ Control Panel on Port 8081 (all interfaces)...
 [SYSTEM] Starting Musashi II Control Panel on Port 8082 (all interfaces)...
 [SYSTEM] Starting Musashi IV Control Panel on Port 8083 (all interfaces)...
 [SYSTEM] Starting Database Plotter on Port 8084 (all interfaces)...
+[SYSTEM] Starting InfluxDB Manager on Port 8085 (all interfaces)...
 [SYSTEM] Services launched in background.
-[SYSTEM] Accessible locally at http://localhost:8080
-[SYSTEM] Accessible network-wide at http://<HOST_IP>:8080
+[SYSTEM] Accessible locally at http://localhost:8081
+[SYSTEM] InfluxDB manager at http://localhost:8085
 ==========================================================
 ```
 
@@ -155,15 +155,16 @@ Once launched, access the web microservices via your browser:
 
 | Service | Port | URL |
 | :--- | :--- | :--- |
-| **Portal Gateway** | `8080` | [http://localhost:8080](http://localhost:8080) |
 | **DAQ USB-4716 Panel** | `8081` | [http://localhost:8081](http://localhost:8081) |
 | **Musashi II Panel** | `8082` | [http://localhost:8082](http://localhost:8082) |
 | **Musashi IV Panel** | `8083` | [http://localhost:8083](http://localhost:8083) |
 | **Database Plotter** | `8084` | [http://localhost:8084](http://localhost:8084) |
+| **InfluxDB Manager** | `8085` | [http://localhost:8085](http://localhost:8085) |
+| **InfluxDB Server** | `8086` | Docker container health endpoint |
 
 Verify active listening ports:
 ```bash
-lsof -i :8080 -i :8081 -i :8082 -i :8083 -i :8084
+lsof -i :8081 -i :8082 -i :8083 -i :8084 -i :8085 -i :8086
 ```
 
 ---

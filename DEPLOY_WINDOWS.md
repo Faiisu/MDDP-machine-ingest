@@ -28,7 +28,7 @@ Before starting deployment, ensure the following are installed on the Windows ma
 
 | Software | Version | Purpose | Download |
 |:---|:---|:---|:---|
-| **Python** | 3.9 or higher | Runtime for all backend services | [python.org/downloads](https://www.python.org/downloads/) |
+| **Python** | 3.12 or higher | Runtime for all backend services | [python.org/downloads](https://www.python.org/downloads/) |
 | **Advantech DAQNavi SDK** | Latest | USB-4716 hardware driver (Real Hardware Mode) | [Advantech Support](https://www.advantech.com/en/support/details/driver?id=1-RNKLZI) |
 | **Git** *(optional)* | Latest | Clone project repository | [git-scm.com](https://git-scm.com/) |
 
@@ -200,6 +200,8 @@ Before configuring automatic background operation, verify everything works manua
 ```cmd
 deploy\windows\run.bat
 ```
+
+> **Note:** The launcher still contains a legacy portal command for port `8080`, but the current checkout does not include `services\portal`. If that command fails, open the service panels directly on ports `8081`–`8084`. The InfluxDB manager is not started by this launcher; run `python services\influxdb\app.py` separately when required.
 
 **Expected output:**
 ```

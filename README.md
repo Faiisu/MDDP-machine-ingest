@@ -1,231 +1,159 @@
 # MDDP Ingestion Control Suite
 
-The Multi-Device Data Ingestion Control Suite (MDDP) is a modular, high-performance software system designed to orchestrate and visualize time-series telemetry from hardware data acquisition systems (such as the Advantech USB-4716 DAQ Card) and robot dispensers.
+MDDP is a modular control and telemetry platform for Advantech USB-4716 data acquisition and Musashi dispenser systems. It provides operator consoles for configuring devices, starting ingestion processes, managing storage targets, and inspecting time-series data.
 
-This repository features:
-- **Portal Gateway (Port 8080)**: A centralized dashboard for auditing and launching active device control panels.
-- **DAQ USB-4716 Control Console (Port 8081)**: A dedicated Flask-SocketIO dashboard to configure, start, stop, and audit telemetry stream ingestion in real time.
-- **Database Plotter (Port 8084)**: A flexible multi-chart grid workspace powered by Plotly.js, displaying time-series telemetry retrieved dynamically from TimescaleDB hypertables.
+## Services
 
----
+| Service | Port | Start file | Purpose |
+| --- | ---: | --- | --- |
+| DAQ USB-4716 console | `8081` | `services/daq_usb4716/app.py` | Configure and control DAQ ingestion. |
+| Musashi II console | `8082` | `services/musashi_ii/app.py` | Configure and control serial dispenser ingestion. |
+| Musashi IV console | `8083` | `services/musashi_iv/app.py` | Configure and control HTTP dispenser ingestion. |
+| Database plotter | `8084` | `services/plotter/app.py` | Query PostgreSQL/TimescaleDB and draw Plotly charts. |
+| InfluxDB manager | `8085` | `services/influxdb/app.py` | Manage the InfluxDB container, credentials, retention, and logs. |
+| InfluxDB server | `8086` | Docker Compose | Stores InfluxDB time-series data. |
 
-## 1. System Architecture & Operation Principles
+The Linux launcher starts the five Python services. The current Windows launcher does not start the InfluxDB manager; run `python services/influxdb/app.py` separately when it is needed on Windows.
 
-### A. User Operation Flow
-Shows how a user configures and runs the data acquisition and plotting pipeline.
+## System operation
 
 ```mermaid
-graph LR
-    Start([User Starts System]) --> StartDB[Start TimescaleDB Service]
-    StartDB --> RunScripts[Run Ingestion Control Suite run.sh / run.bat]
-    RunScripts --> LaunchPortal[Access Portal Gateway :8080]
-    
-    LaunchPortal --> SelectDAQ[Select DAQ USB-4716 Panel :8081]
-    SelectDAQ --> AdjustConfig[Modify & Save Configuration Parameters]
-    AdjustConfig --> StartStream{Start Stream Ingestion}
-    
-    StartStream -->|Mock Mode| StartMock[Run mockup_stream_to_db.py]
-    StartStream -->|Real Hardware Mode| StartReal[Run stream_to_db.py]
-    
-    StartMock --> IngestionLoop[Telemetry batch-inserted into TimescaleDB]
-    StartReal --> IngestionLoop
-    
-    IngestionLoop --> OpenPlotter[Launch Database Plotter :8084]
-    OpenPlotter --> QueryLive[Select Channel & view live Plotly charts]
-    QueryLive --> Verify{Telemetry verified?}
-    
-    Verify -->|No| AdjustConfig
-    Verify -->|Yes| EndIngestion[Stop Stream & shutdown via stop.sh]
-    
+flowchart TD
+    Start([Start suite]) --> Install[Install dependencies]
+    Install --> Configure[Configure device and storage]
+    Configure --> Launch[Launch service consoles]
+    Launch --> DAQ[Open DAQ console :8081]
+    DAQ --> Mode{Select mode}
+    Mode -->|Mockup| Mock[Generate synthetic telemetry]
+    Mode -->|Real| Hardware[Read USB-4716]
+    Mock --> Destination{Choose destination}
+    Hardware --> Destination
+    Destination -->|PostgreSQL| SQL[(TimescaleDB)]
+    Destination -->|InfluxDB| Influx[(InfluxDB :8086)]
+    Destination -->|MQTT| Broker[(MQTT broker)]
+    SQL --> Plot[Open plotter :8084]
+    Influx --> Manage[Manage retention :8085]
+    Plot --> Verify([Verify telemetry])
+    Manage --> Verify
+
     style Start fill:#e1f5e1,stroke:#4caf50,color:#000
-    style LaunchPortal fill:#e3f2fd,stroke:#2196f3,color:#000
-    style StartStream fill:#fff3e0,stroke:#ff9800,color:#000
+    style Launch fill:#e3f2fd,stroke:#2196f3,color:#000
+    style Mode fill:#fff3e0,stroke:#ff9800,color:#000
     style Verify fill:#fce4ec,stroke:#e91e63,color:#000
 ```
 
-### B. Technical Architecture Diagram
-Depicts the layered structure of the tech stack and the data pathways across services.
+The DAQ reader polls hardware or generates a mockup waveform, timestamps samples, queues them in memory, and writes batches to the configured destination. PostgreSQL/TimescaleDB uses the `daq_samples` table with `time`, `channel`, and `value` columns. The schema is in [`scripts/sql/db_setup.sql`](scripts/sql/db_setup.sql).
 
-```mermaid
-graph LR
-    subgraph "Presentation Layer"
-        Portal[Portal Gateway<br/>Vanilla HTML / CSS / JS]
-        DAQView[DAQ UI Panel<br/>Bootstrap + SocketIO]
-        PlotView[Plotter UI<br/>Plotly.js dynamic grid]
-    end
+## Prerequisites
 
-    subgraph "Application & Service Layer"
-        WebServer[Python http.server<br/>Port 8080]
-        DAQGUISvc["DAQ Control Server<br/>Flask + SocketIO (Port 8081)"]
-        PlotSvc["Analytics & Plotter Service<br/>Flask Stateless Web API (Port 8084)"]
-        DAQStream[Ingestion Process<br/>stream_to_db.py]
-    end
+- Python `3.12` or newer.
+- `uv` recommended, or Python `venv` and `pip`.
+- PostgreSQL with TimescaleDB for SQL storage and plotting.
+- Mosquitto or another MQTT broker when using `DESTINATION=mqtt`.
+- Advantech DAQNavi SDK when using a physical USB-4716.
+- Docker and Docker Compose when using InfluxDB.
 
-    subgraph "Data & Messaging Layer"
-        TimescaleDB[(TimescaleDB / PostgreSQL<br/>Port 5432)]
-        MQTTBroker[MQTT Broker<br/>Port 1883]
-    end
+## Linux quick start
 
-    Portal -.->|links| DAQView
-    Portal -.->|links| PlotView
-
-    DAQView -->|WebSockets| DAQGUISvc
-    DAQGUISvc -->|Popen subprocess| DAQStream
-    PlotView -->|REST queries| PlotSvc
-
-    DAQStream -->|psycopg2 bulk INSERT| TimescaleDB
-    DAQStream -.->|paho-mqtt publish| MQTTBroker
-    PlotSvc -->|psycopg2 SELECT queries| TimescaleDB
-
-    style Portal fill:#61dafb,stroke:#00d8ff,color:#000
-    style DAQGUISvc fill:#ff6b6b,stroke:#ff0000,color:#000
-    style TimescaleDB fill:#4caf50,stroke:#2e7d32,color:#000
-    style MQTTBroker fill:#ff9800,stroke:#e65100,color:#000
-```
-
-### C. Data Flow Diagram
-Maps internal threading, buffering, and output target flows of the streaming pipeline.
-
-```mermaid
-graph LR
-    subgraph HW [USB-4716 Hardware]
-        AI["Analog Input Channels (ch0-ch7)"]
-    end
-
-    subgraph Pipeline [stream_to_db.py]
-        direction TB
-        DAQThread["🧵 DAQ-Reader Thread"]
-        Queue[("📥 In-memory queue.Queue (maxsize=200)")]
-        WriterThread["🧵 Data Writer Thread"]
-        Stats[("📊 Stats Lock & Dict")]
-        MonitorThread["🧵 Monitor Thread"]
-
-        DAQThread -->|1. Poll via getDataF64| AI
-        DAQThread -->|2. Wall-clock timestamping & raw enqueue| Queue
-        DAQThread -->|Update stats| Stats
-        Queue -->|3. Dequeue batch| WriterThread
-        WriterThread -->|4. Parse interleaved samples & compute periodic ts| WriterThread
-        WriterThread -->|Update stats| Stats
-        MonitorThread -->|Read stats & log stdout| Stats
-    end
-
-    subgraph Targets [Configurable Destinations]
-        TimescaleDB[("🗄️ TimescaleDB (daq_samples)")]
-        MQTTBroker[("📡 MQTT Broker (daq/telemetry)")]
-    end
-
-    WriterThread -->|"5a. execute_values (DESTINATION=database)"| TimescaleDB
-    WriterThread -->|"5b. publish JSON batch (DESTINATION=mqtt)"| MQTTBroker
-```
-
----
-
-## 2. Tech Stack
-
-- **Frontend**: Vanilla HTML5, CSS Grid/Flexbox matching the Unified Industrial Cockpit Design Tokens, Javascript (ES6), Socket.io Client, and Plotly.js.
-- **Backend Services**: Python 3, Flask, Flask-SocketIO, Eventlet (for high-concurrency event loops).
-- **Ingestion Pipeline**: Multi-threaded Python pipeline, `psycopg2` bulk inserts, Advantech DAQNavi driver interface.
-- **Database**: TimescaleDB / PostgreSQL.
-
----
-
-## 3. Quick Start & Deployment Options
-
-The MDDP Ingestion Control Suite supports two deployment paths tailored to target operating systems and environment needs:
-
-| Operating System | Recommended Deployment Method | Primary Setup Commands | Full Guide Link |
-| :--- | :--- | :--- | :--- |
-| **Linux (Ubuntu/Debian)** | **Native Script-Based Setup** (`.sh`) | `./deploy/linux/install_deps.sh`<br/>`./deploy/linux/run.sh` | [DEPLOY_LINUX.md](DEPLOY_LINUX.md) |
-| **Windows 10/11** | **Native Script-Based Setup** (`.bat`) | `deploy\windows\install_deps.bat`<br/>`deploy\windows\run.bat`<br/>`powershell .\deploy\windows\setup_task_scheduler.ps1` | [DEPLOY_WINDOWS.md](DEPLOY_WINDOWS.md) |
-
----
-
-### Option A: Linux Deployment (Script-Based)
-
-Deploy all web microservices using native Linux shell scripts:
+Run from the project root:
 
 ```bash
-# 1. Install dependencies into virtualenv
 ./deploy/linux/install_deps.sh
-
-# 2. Launch background application services
+psql "postgresql://admin:admin@localhost:5432/daq_db" -f scripts/sql/db_setup.sql
 ./deploy/linux/run.sh
+```
 
-# 3. Stop background services
+Open the required console:
+
+- DAQ: [http://localhost:8081](http://localhost:8081)
+- Musashi II: [http://localhost:8082](http://localhost:8082)
+- Musashi IV: [http://localhost:8083](http://localhost:8083)
+- Plotter: [http://localhost:8084](http://localhost:8084)
+- InfluxDB manager: [http://localhost:8085](http://localhost:8085)
+
+Stop the suite with:
+
+```bash
 ./deploy/linux/stop.sh
 ```
 
-See [DEPLOY_LINUX.md](DEPLOY_LINUX.md) for full instructions and hardware connectivity configuration.
+See [`DEPLOY_LINUX.md`](DEPLOY_LINUX.md) for systemd, hardware permissions, and diagnostics.
 
----
-
-### Option B: Windows Deployment (Script-Based)
-
-For 24/7 unattended Windows operation with native Advantech USB-4716 hardware drivers:
+## Windows quick start
 
 ```cmd
-:: 1. Install dependencies into virtualenv
 deploy\windows\install_deps.bat
-
-:: 2. Test manual execution
 deploy\windows\run.bat
-
-:: 3. Setup 24/7 background operation in Task Scheduler (Run as Admin in PowerShell)
-powershell -ExecutionPolicy Bypass -File .\deploy\windows\setup_task_scheduler.ps1
 ```
 
-See [DEPLOY_WINDOWS.md](DEPLOY_WINDOWS.md) for complete details on Windows Task Scheduler, automatic crash recovery via `watchdog.ps1`, and firewall rules.
+See [`DEPLOY_WINDOWS.md`](DEPLOY_WINDOWS.md) for Task Scheduler, watchdog, firewall, and hardware setup. Start the InfluxDB manager separately when needed:
 
----
-
-## 4. Configuration Documentation
-
-The hardware interface, database connection parameters, and calibration parameters are configured via [services/daq_usb4716/config.json](services/daq_usb4716/config.json).
-
-### Output Destination & MQTT Parameters
-| Parameter | Default Value | Description |
-|:---|:---|:---|
-| `DESTINATION` | `database` | Output target mode (`database` for direct TimescaleDB, `mqtt` for MQTT Broker publishing). |
-| `MQTT_BROKER` | `localhost` | Hostname or IP address of the target MQTT broker. |
-| `MQTT_PORT` | `1883` | Port number of the MQTT broker service. |
-| `MQTT_TOPIC` | `daq/telemetry` | MQTT topic where serialized JSON sample batches are published. |
-| `MQTT_QOS` | `0` | MQTT Quality of Service level (`0`: At most once, `1`: At least once, `2`: Exactly once). |
-| `DB_DSN` | `postgresql://admin:admin@172.21.108.86:5432/daq_db` | Connection DSN string for production TimescaleDB service. |
-| `MOCKUP_DB_DSN` | `postgresql://admin:admin@localhost:5432/daq_db` | Connection DSN string for localized database testing. |
-| `DEVICE_DESCRIPTION` | `USB-4716,BID#0` | Unique hardware identifier matching the Advantech DAQ card name. |
-
-### Ingestion Parameter Tuning
-| Parameter | Default Value | Description |
-|:---|:---|:---|
-| `START_CHANNEL` | `0` | Starting index of analog input channel scan. |
-| `CHANNEL_COUNT` | `1` | Number of analog channels to scan (max 8 channels on single-ended connections). |
-| `CLOCK_RATE` | `2000` | Hardware scanning frequency (samples per second per channel). |
-| `SECTION_LENGTH` | `500` | Ingestion batch buffer size. Determines chunk size transferred to queue. |
-| `QUEUE_MAXSIZE` | `200` | Maximum limit of the in-memory threading queue to protect against memory leaks. |
-| `DB_PAGE_SIZE` | `1000` | Number of telemetry rows packed into a single database transactional `INSERT`. |
-
-### Calibration & Scale Configs
-The `SCALE_CONFIGS` block maps raw analog voltages (1V to 5V or 0V to 10V) to physical instrument metrics (e.g., pressure, flow, temperature).
-```json
-"SCALE_CONFIGS": {
-  "0": {
-    "enabled": true,
-    "low_voltage": 1.0,
-    "high_voltage": 5.0,
-    "low_value": -100.0,
-    "high_value": 100.0
-  }
-}
+```cmd
+python services\influxdb\app.py
 ```
-*If `enabled` is `true`, raw voltages reading from the channel are mapped linearly from `[low_voltage, high_voltage]` range into the `[low_value, high_value]` unit spectrum prior to transmission/storage.*
 
----
+## InfluxDB setup
 
-## 5. MQTT Telemetry & Bridge
+The server is defined in [`docker-compose.influxdb.yml`](docker-compose.influxdb.yml), exposes port `8086`, and persists data in Docker volumes `influxdb2_data` and `influxdb2_config`.
 
-When `DESTINATION` is set to `mqtt`, the DAQ streaming pipeline publishes JSON telemetry batches directly to the configured MQTT broker.
+From the manager on port `8085`:
 
-### JSON Payload Format
+1. Open **Lifecycle overview** and start the container.
+2. Open **Connection setup** and verify URL, organization, bucket, measurement, and token.
+3. Use **Sync token → DAQ service** after changing DAQ-facing connection settings.
+4. Use **Retention policy** to apply bucket expiry.
+5. Use **Runtime logs** to inspect container output.
+
+To run Docker Compose directly, create a local `.env.influxdb` file:
+
+```dotenv
+INFLUX_USERNAME=admin
+INFLUX_PASSWORD=replace-with-a-strong-password
+INFLUX_ORG=mddp
+INFLUX_BUCKET=daq_telemetry
+INFLUX_RETENTION=0
+```
+
+```bash
+docker compose --env-file .env.influxdb -f docker-compose.influxdb.yml up -d
+docker compose --env-file .env.influxdb -f docker-compose.influxdb.yml stop
+```
+
+The manager configuration is stored in [`services/influxdb/influxdb_config.json`](services/influxdb/influxdb_config.json). Do not commit production passwords or tokens.
+
+## Configuration reference
+
+The DAQ configuration is [`services/daq_usb4716/config.json`](services/daq_usb4716/config.json).
+
+| Key | Purpose | Example |
+| --- | --- | --- |
+| `DEVICE_DESCRIPTION` | Advantech device identifier. | `USB-4716,BID#0` |
+| `DESTINATION` | `postgresql`, `influxdb`, or `mqtt`. | `postgresql` |
+| `DB_DSN` | PostgreSQL/TimescaleDB connection string. | `postgresql://user:password@host:5432/daq_db` |
+| `INFLUX_URL` | InfluxDB HTTP endpoint. | `http://localhost:8086` |
+| `INFLUX_ORG` | InfluxDB organization. | `mddp` |
+| `INFLUX_BUCKET` | InfluxDB bucket. | `daq_telemetry` |
+| `INFLUX_MEASUREMENT` | InfluxDB measurement. | `daq_telemetry` |
+| `INFLUX_TOKEN` | Token used for InfluxDB writes. | Secret value |
+| `START_CHANNEL` | First channel to scan. | `0` |
+| `CHANNEL_COUNT` | Number of analog channels. | `1` to `8` |
+| `CLOCK_RATE` | Samples per second per channel. | `2000` |
+| `SECTION_LENGTH` | Samples per ingestion batch. | `500` |
+| `QUEUE_MAXSIZE` | Maximum in-memory queue depth. | `200` |
+| `MQTT_BROKER` | MQTT host when destination is MQTT. | `localhost` |
+| `MQTT_PORT` | MQTT broker port. | `1883` |
+| `MQTT_TOPIC` | Telemetry topic. | `daq/telemetry` |
+
+The InfluxDB manager configuration is [`services/influxdb/influxdb_config.json`](services/influxdb/influxdb_config.json). It contains URL, organization, bucket, measurement, credentials, token, and retention fields. When retention is disabled, the manager sets the bucket rule to `0`, retaining data indefinitely.
+
+## MQTT bridge
+
+Set `DESTINATION` to `mqtt` in the DAQ config to publish JSON batches. To persist those batches into PostgreSQL/TimescaleDB, run:
+
+```bash
+python services/daq_usb4716/mqtt_to_db.py
+```
+
 ```json
 [
   {
@@ -236,50 +164,68 @@ When `DESTINATION` is set to `mqtt`, the DAQ streaming pipeline publishes JSON t
 ]
 ```
 
-### Standalone MQTT-to-DB Subscriber
-To consume telemetry from the MQTT broker and persist it into TimescaleDB:
+## API overview
+
+DAQ (`8081`): `GET/POST /api/config`, `GET /api/status`, `POST /api/test_db`, `GET /api/scan_usb`, and Socket.IO control/status events.
+
+InfluxDB manager (`8085`): `GET/POST /api/config`, `GET /api/status`, `POST /api/start`, `POST /api/stop`, `POST /api/retention`, `POST /api/sync_daq`, and `GET /api/logs`.
+
+## UI pattern system
+
+Future service consoles should reuse [`ui-tokens.css`](services/influxdb/static/ui-tokens.css) and [`ui-patterns.css`](services/influxdb/static/ui-patterns.css). See [`services/ui_patterns/README.md`](services/ui_patterns/README.md) and [`docs/UI_DESIGN_SYSTEM.md`](docs/UI_DESIGN_SYSTEM.md).
+
+The default InfluxDB theme is **Arctic Light**. Available themes are `arctic-light`, `dark-ocean`, `emerald-matrix`, `amber-cockpit`, and `dracula`. The selected theme is stored under `influx_ui_theme` in browser local storage.
+
+## Development and testing
+
 ```bash
-uv run services/daq_usb4716/mqtt_to_db.py
+PYTHONPATH=. python -m pytest -q tests/test_influxdb_service.py
+python -m py_compile services/influxdb/app.py
+node --check services/influxdb/static/app.js
 ```
 
----
+Run an individual service during development:
 
-## 6. Project Structure
+```bash
+python services/influxdb/app.py
+```
 
-- `services/`: Unified microservices folder.
-  - `portal/`: Portal Gateway static site files (`index.html`, `app.js`, `style.css`).
-  - `daq_usb4716/`: DAQ Controller daemon files (`app.py`, `stream_to_db.py`, `mockup_stream_to_db.py`, `mqtt_to_db.py`).
-  - `musashi_ii/`: Musashi II Dispenser Controller service (`app.py`, `read_musashi.py`, `database_handler.py`).
-  - `musashi_iv/`: Musashi IV Dispenser Controller service (`app.py`, `stream_to_db.py`, `api_client.py`).
-  - `plotter/`: Database Telemetry Visualizer service (`app.py`, static asset grid layout).
-- `shared/`: Shared Python utilities (`config.py`, `db.py`, `process_manager.py`).
-- `scripts/`: System scripts and SQL definitions (`scripts/sql/db_setup.sql`).
-- `deploy/`: Platform deployment runners for Linux and Windows (`deploy/linux/`, `deploy/windows/`).
-- `docs/`: Design system specifications, diagrams, and architecture reference files.
+Do not commit generated PID files, local logs, production credentials, API tokens, or Docker secrets.
 
----
+## Project structure
 
-## 7. Troubleshooting Tips
+```text
+.
+├── deploy/                    # Linux and Windows launch/deployment scripts
+├── docs/                      # Architecture and UI design documentation
+├── scripts/sql/db_setup.sql   # PostgreSQL/TimescaleDB schema
+├── services/
+│   ├── daq_usb4716/           # DAQ console and ingestion workers
+│   ├── influxdb/              # InfluxDB manager and UI reference implementation
+│   ├── musashi_ii/            # Serial dispenser console and reader
+│   ├── musashi_iv/            # HTTP dispenser console and reader
+│   ├── plotter/               # PostgreSQL/TimescaleDB Plotly dashboard
+│   └── ui_patterns/           # Shared UI composition documentation
+├── tests/                     # Service and integration tests
+├── docker-compose.influxdb.yml
+├── pyproject.toml
+└── README.md
+```
 
-### ⚠️ Common Issue: Port Conflict
-- **Symptom**: `[SYSTEM] Warning: PID files detected` or failed socket binding warnings during startup.
-- **Solution**: Execute `./deploy/linux/stop.sh` to clear dangling processes. If ports remain blocked, check processes listening on ports:
-  ```bash
-  kill -9 $(lsof -t -i :8080 -i :8081 -i :8084)
-  ```
+## Troubleshooting
 
-### ⚠️ Common Issue: TimescaleDB Connection Timeout
-- **Symptom**: Log reports `psycopg2.OperationalError: connection to server at ... failed: Connection timed out`.
-- **Solution**: Make sure TimescaleDB service is running and accessible. If connecting to an external server DSN, verify host accessibility via pinging:
-  ```bash
-  ping 172.21.108.86
-  ```
+Check port conflicts:
 
-### 💡 Recommendation: Running Mockup Mode for Local Work
-If you are developing locally without an active USB-4716 hardware card:
-1. Initialize the mockup database:
-   ```sql
-   CREATE DATABASE mockup;
-   ```
-2. Enable mockup mode in the DAQ Control Console (Port 8081).
-3. The server will stream synthetic sinusoidal telemetry to the mockup database, enabling offline pipeline testing.
+```bash
+lsof -nP -iTCP:8081 -iTCP:8082 -iTCP:8083 -iTCP:8084 -iTCP:8085 -sTCP:LISTEN
+```
+
+If DAQ hardware is missing, verify DAQNavi, `DEVICE_DESCRIPTION`, and device permissions, or use mockup mode. If PostgreSQL fails, verify `DB_DSN` and run [`scripts/sql/db_setup.sql`](scripts/sql/db_setup.sql). If InfluxDB is offline, confirm Docker, port `8086`, and the manager's **Runtime logs** panel.
+
+## Additional guides
+
+- [Linux deployment](DEPLOY_LINUX.md)
+- [Windows deployment](DEPLOY_WINDOWS.md)
+- [Architecture guide](docs/ARCHITECTURE.md)
+- [UI design system](docs/UI_DESIGN_SYSTEM.md)
+- [Plotter development guide](services/plotter/DEVELOPMENT.md)
