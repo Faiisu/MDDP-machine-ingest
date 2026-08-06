@@ -1,0 +1,7 @@
+psycopg2-binary
+pyarrow
+numpy
+pandas
+matplotlib
+seaborn
+flask

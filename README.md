@@ -11,10 +11,11 @@ MDDP is a modular control and telemetry platform for Advantech USB-4716 data acq
 | Musashi II console | `8082` | `services/musashi_ii/app.py` | Configure and control serial dispenser ingestion. |
 | Musashi IV console | `8083` | `services/musashi_iv/app.py` | Configure and control HTTP dispenser ingestion. |
 | Database plotter | `8084` | `services/plotter/app.py` | Query PostgreSQL/TimescaleDB and draw Plotly charts. |
+| LLM interpretation worker | `8085` | `services/llm-interpret/app.py` | Analyze completed telemetry windows and store custom LLM summaries. |
 | InfluxDB manager | `18085` | `services/influxdb/app.py` | Manage the InfluxDB container, credentials, retention, and logs. |
 | InfluxDB server | `8086` | Docker Compose | Stores InfluxDB time-series data. |
 
-Both platform launchers start the portal and the five Python services. Open the portal at `http://{host-ip}:8080`; its cards direct the browser to the same host on each service port.
+Both platform launchers start the portal and the six Python services. Open the portal at `http://{host-ip}:8080`; its cards direct the browser to the same host on each service port.
 
 ## System operation
 
@@ -71,6 +72,7 @@ Open the portal, then select a service:
 - Musashi II: [http://localhost:8082](http://localhost:8082)
 - Musashi IV: [http://localhost:8083](http://localhost:8083)
 - Plotter: [http://localhost:8084](http://localhost:8084)
+- LLM interpretation worker: [http://localhost:8085](http://localhost:8085)
 - InfluxDB manager: [http://localhost:18085](http://localhost:18085)
 
 Stop the suite with:
@@ -143,6 +145,10 @@ The DAQ configuration is [`services/daq_usb4716/config.json`](services/daq_usb47
 | `MQTT_PORT` | MQTT broker port. | `1883` |
 | `MQTT_TOPIC` | Telemetry topic. | `daq/telemetry` |
 
+Open [http://localhost:8085](http://localhost:8085) for the LLM interpretation configuration console. It reads [`services/llm-interpret/config.json`](services/llm-interpret/config.json), defaults to `daq_samples(time, channel, value)`, analyzes each completed `ANALYSIS_INTERVAL` window, and upserts the result into `llm_interpret_summaries`. Set `LLM_API_URL` to the custom server's OpenAI-compatible chat endpoint. Set `LLM_REQUEST_FORMAT` to `prompt` for a completion-style endpoint. `HIGH_THRESHOLD`, `LOW_THRESHOLD`, and `CORRELATION_BUCKET_SECONDS` control the basic analysis.
+
+Useful worker endpoints are `GET http://localhost:8085/api/status`, `GET http://localhost:8085/api/config`, and `POST http://localhost:8085/api/run`. A manual run accepts `{"range":"10m"}` or explicit timezone-aware `start` and `end` timestamps. If the LLM is offline, the worker stores a deterministic statistics-based summary and records the error in `llm_error` instead of losing the time window.
+
 The InfluxDB manager configuration is [`services/influxdb/influxdb_config.json`](services/influxdb/influxdb_config.json). It contains URL, organization, bucket, measurement, credentials, token, and retention fields. When retention is disabled, the manager sets the bucket rule to `0`, retaining data indefinitely.
 
 ## MQTT bridge
@@ -168,6 +174,7 @@ python services/daq_usb4716/mqtt_to_db.py
 DAQ (`8081`): `GET/POST /api/config`, `GET /api/status`, `POST /api/test_db`, `GET /api/scan_usb`, and Socket.IO control/status events.
 
 InfluxDB manager (`18085`): `GET/POST /api/config`, `GET /api/status`, `POST /api/start`, `POST /api/stop`, `POST /api/retention`, `POST /api/sync_daq`, and `GET /api/logs`.
+LLM interpretation worker (`8085`): `GET/POST /api/config`, `GET /api/status`, `POST /api/test/db`, `POST /api/test/llm`, `GET /api/summary/latest`, and `POST /api/run`.
 
 ## UI pattern system
 
@@ -205,6 +212,7 @@ Do not commit generated PID files, local logs, production credentials, API token
 │   ├── musashi_ii/            # Serial dispenser console and reader
 │   ├── musashi_iv/            # HTTP dispenser console and reader
 │   ├── plotter/               # PostgreSQL/TimescaleDB Plotly dashboard
+│   ├── llm-interpret/         # Periodic telemetry analysis and LLM summaries
 │   └── ui_patterns/           # Shared UI composition documentation
 ├── tests/                     # Service and integration tests
 ├── docker-compose.influxdb.yml
@@ -217,7 +225,7 @@ Do not commit generated PID files, local logs, production credentials, API token
 Check port conflicts:
 
 ```bash
-lsof -nP -iTCP:8080 -iTCP:8081 -iTCP:8082 -iTCP:8083 -iTCP:8084 -iTCP:18085 -sTCP:LISTEN
+lsof -nP -iTCP:8080 -iTCP:8081 -iTCP:8082 -iTCP:8083 -iTCP:8084 -iTCP:8085 -iTCP:18085 -sTCP:LISTEN
 ```
 
 If DAQ hardware is missing, verify DAQNavi, `DEVICE_DESCRIPTION`, and device permissions, or use mockup mode. If PostgreSQL fails, verify `DB_DSN` and run [`scripts/sql/db_setup.sql`](scripts/sql/db_setup.sql). If InfluxDB is offline, confirm Docker, port `8086`, and the manager's **Runtime logs** panel.

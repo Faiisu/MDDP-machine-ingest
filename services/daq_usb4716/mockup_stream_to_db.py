@@ -5,8 +5,8 @@
 """
 mockup_stream_to_db.py
 ──────────────────────
-Mock-up version of stream_to_db.py — synthetic DAQ data, writes to a real
-TimescaleDB database named "mockup" (auto-created if it does not exist).
+Mock-up version of stream_to_db.py — synthetic DAQ data written to the
+configured output destination, using a ``_mockup``-suffixed target name.
 
 Architecture (2-thread + Queue) — identical to real pipeline:
   ┌──────────────────────────────────────────────────┐
@@ -20,7 +20,7 @@ Architecture (2-thread + Queue) — identical to real pipeline:
   ┌─────────────────────▼────────────────────────────┐
   │ DB Writer Thread  (parse + real psycopg2 INSERT) │
   │  get(raw) → compute periodic forward ts → INSERT │
-  │  → database: "mockup"  table: daq_samples        │
+  │  → configured database  table: <DB_TABLE>_mockup │
   └──────────────────────────────────────────────────┘
 
 Mock DAQ behaviour:
@@ -30,9 +30,8 @@ Mock DAQ behaviour:
   - Sleeps to simulate hardware acquisition time (SECTION_LENGTH / CLOCK_RATE)
 
 DB behaviour:
-  - On startup: connects to the Postgres server and creates the "mockup"
-    database if it does not exist, then creates the daq_samples table
-    (+ TimescaleDB hypertable) if they do not exist.
+  - On startup: connects to the configured Postgres server and creates the
+    ``<DB_TABLE>_mockup`` table (and TimescaleDB hypertable) if needed.
   - Writes real rows via psycopg2 execute_values — identical INSERT path
     to stream_to_db.py, just targeting a different database.
   - Optionally also dumps rows to a CSV file (MOCKUP_CSV_PATH).
@@ -55,6 +54,7 @@ from datetime import datetime, timezone
 import psycopg2
 import psycopg2.extras
 import psycopg2.extensions
+import psycopg2.sql
 
 try:
     from services.daq_usb4716.rate_control import ChannelRateLimiter, normalize_channel_sample_rates
@@ -89,22 +89,15 @@ MOCKUP_CSV_PATH     = None    # Set to a filepath string to also dump rows to CS
 MOCKUP_PRINT_ROWS   = False   # Set True to print every parsed row (very verbose)
 MOCKUP_SUMMARY_ROWS = 5       # How many sample rows to show per stats interval
 
-# ─── Mockup DB settings ──────────────────────────────────────────────────────
-# The mockup always writes to the "mockup" database on the same server as
-# config.MOCKUP_DB_DSN.  We parse the DSN to swap out the database name.
-MOCKUP_DB_NAME = "mockup"
+# ─── Mockup output names ─────────────────────────────────────────────────────
+def mockup_target_name(name: str, default: str) -> str:
+    """Return a destination name that is isolated from real DAQ data."""
+    target = str(name or default).strip()
+    return target if target.endswith("_mockup") else f"{target}_mockup"
 
-def _build_mockup_dsn(original_dsn: str, dbname: str) -> str:
-    """Replace the database name in a postgresql:// DSN."""
-    # psycopg2 can parse DSNs for us
-    parsed = psycopg2.extensions.make_dsn(original_dsn)
-    parts  = psycopg2.extensions.parse_dsn(parsed)
-    parts["dbname"] = dbname
-    return psycopg2.extensions.make_dsn(**parts)
 
-mockup_dsn = getattr(config, 'MOCKUP_DB_DSN', getattr(config, 'DB_DSN', 'postgresql://admin:admin@172.21.108.86:5432/daq_db'))
-_POSTGRES_DSN = _build_mockup_dsn(mockup_dsn, "postgres")
-MOCKUP_MOCKUP_DB_DSN = _build_mockup_dsn(mockup_dsn, MOCKUP_DB_NAME)
+MOCKUP_TABLE = mockup_target_name(getattr(config, 'DB_TABLE', ''), 'daq_samples')
+MOCKUP_DB_DSN = getattr(config, 'DB_DSN', 'postgresql://admin:admin@localhost:5432/daq_db')
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -135,40 +128,10 @@ _recent_rows: list = []
 
 # ─── DB bootstrap (run once before threads start) ────────────────────────────
 def ensure_mockup_db():
-    """
-    1. Connect to the 'postgres' maintenance DB.
-    2. CREATE DATABASE mockup  (if not exists — Postgres has no IF NOT EXISTS
-       for CREATE DATABASE, so we check pg_database instead).
-    3. Connect to 'mockup' and CREATE TABLE / hypertable if not exists.
-    """
-    # ── Step 1 & 2: create database ──────────────────────────────────────────
-    log.info(f"[DBSetup] Checking if database '{MOCKUP_DB_NAME}' exists...")
+    """Create the configured mockup table in the configured database."""
+    log.info(f"[DBSetup] Ensuring mockup table '{MOCKUP_TABLE}'...")
     try:
-        conn = psycopg2.connect(_POSTGRES_DSN)
-        conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
-        cur = conn.cursor()
-
-        cur.execute(
-            "SELECT 1 FROM pg_database WHERE datname = %s", (MOCKUP_DB_NAME,)
-        )
-        exists = cur.fetchone()
-
-        if not exists:
-            cur.execute(f'CREATE DATABASE "{MOCKUP_DB_NAME}"')
-            log.info(f"[DBSetup] Database '{MOCKUP_DB_NAME}' created.")
-        else:
-            log.info(f"[DBSetup] Database '{MOCKUP_DB_NAME}' already exists.")
-
-        cur.close()
-        conn.close()
-    except Exception as e:
-        log.error(f"[DBSetup] Failed to create database: {e}")
-        raise
-
-    # ── Step 3: create table + hypertable in mockup DB ───────────────────────
-    log.info(f"[DBSetup] Ensuring schema in '{MOCKUP_DB_NAME}'...")
-    try:
-        conn = psycopg2.connect(MOCKUP_MOCKUP_DB_DSN)
+        conn = psycopg2.connect(MOCKUP_DB_DSN)
         conn.autocommit = True
         cur = conn.cursor()
 
@@ -181,19 +144,19 @@ def ensure_mockup_db():
                         "Falling back to plain PostgreSQL table (no hypertable).")
             conn.autocommit = True   # reset after any implicit rollback
 
-        # Main samples table
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS daq_samples (
+        cur.execute(psycopg2.sql.SQL("""
+            CREATE TABLE IF NOT EXISTS {} (
                 time        TIMESTAMPTZ      NOT NULL,
                 channel     SMALLINT         NOT NULL,
                 value       DOUBLE PRECISION NOT NULL
             );
-        """)
+        """).format(psycopg2.sql.Identifier(MOCKUP_TABLE)))
 
         # Convert to hypertable (safe to call repeatedly thanks to if_not_exists)
         try:
             cur.execute(
-                "SELECT create_hypertable('daq_samples', 'time', if_not_exists => TRUE);"
+                "SELECT create_hypertable(%s, 'time', if_not_exists => TRUE);",
+                (MOCKUP_TABLE,)
             )
             log.info("[DBSetup] Hypertable ready.")
         except Exception as e:
@@ -201,26 +164,17 @@ def ensure_mockup_db():
                         "Using plain table — data will still be written correctly.")
 
         # Index for fast channel + time queries
-        cur.execute("""
-            CREATE INDEX IF NOT EXISTS idx_mockup_channel_time
-                ON daq_samples (channel, time DESC);
-        """)
-
-        # Session metadata table (mirrors scripts/sql/db_setup.sql)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS daq_sessions (
-                id            SERIAL PRIMARY KEY,
-                started_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                stopped_at    TIMESTAMPTZ,
-                channel_count SMALLINT    NOT NULL,
-                clock_rate_hz INTEGER     NOT NULL,
-                notes         TEXT
-            );
-        """)
+        index_name = f"idx_{MOCKUP_TABLE}_channel_time"[:63]
+        cur.execute(psycopg2.sql.SQL("""
+            CREATE INDEX IF NOT EXISTS {} ON {} (channel, time DESC);
+        """).format(
+            psycopg2.sql.Identifier(index_name),
+            psycopg2.sql.Identifier(MOCKUP_TABLE),
+        ))
 
         cur.close()
         conn.close()
-        log.info(f"[DBSetup] Schema ready in '{MOCKUP_DB_NAME}'.")
+        log.info(f"[DBSetup] Mockup table '{MOCKUP_TABLE}' is ready.")
     except Exception as e:
         log.error(f"[DBSetup] Schema setup failed: {e}")
         raise
@@ -438,10 +392,10 @@ class TimescaleDBClient:
     """
     Responsibility: Manage TimescaleDB connection lifecycle, transactions, and execution.
     """
-    def __init__(self, dsn, stop_event, dbname=None):
+    def __init__(self, dsn, stop_event, table_name):
         self.dsn = dsn
         self.stop_event = stop_event
-        self.dbname = dbname
+        self.table_name = table_name
         self.conn = None
         self.cur = None
 
@@ -455,8 +409,7 @@ class TimescaleDBClient:
                 self.conn = psycopg2.connect(self.dsn)
                 self.conn.autocommit = False
                 self.cur = self.conn.cursor()
-                db_desc = f" '{self.dbname}'" if self.dbname else ""
-                log.info(f"[MockDB] Connected to database{db_desc}")
+                log.info(f"[MockDB] Connected to database (table: {self.table_name})")
                 return True
             except Exception as e:
                 log.error(f"[MockDB] DB connection failed: {e} — retrying in 5s")
@@ -469,10 +422,12 @@ class TimescaleDBClient:
     def insert_samples(self, rows, page_size):
         if not self.conn or not self.cur:
             raise RuntimeError("Not connected to database")
-        INSERT_SQL = "INSERT INTO daq_samples (time, channel, value) VALUES %s"
+        insert_sql = psycopg2.sql.SQL(
+            "INSERT INTO {} (time, channel, value) VALUES %s"
+        ).format(psycopg2.sql.Identifier(self.table_name)).as_string(self.conn)
         try:
             psycopg2.extras.execute_values(
-                self.cur, INSERT_SQL, rows, page_size=page_size
+                self.cur, insert_sql, rows, page_size=page_size
             )
             self.conn.commit()
         except Exception as e:
@@ -484,7 +439,7 @@ class TimescaleDBClient:
                 self.conn.autocommit = False
                 self.cur = self.conn.cursor()
                 psycopg2.extras.execute_values(
-                    self.cur, INSERT_SQL, rows, page_size=page_size
+                    self.cur, insert_sql, rows, page_size=page_size
                 )
                 self.conn.commit()
                 log.info("[MockDB] Insertion succeeded after auto-creating database/tables.")
@@ -738,7 +693,7 @@ def db_writer_thread():
         client = MQTTClient(
             broker=getattr(config, 'MQTT_BROKER', 'localhost'),
             port=getattr(config, 'MQTT_PORT', 1883),
-            topic=getattr(config, 'MQTT_TOPIC', 'daq/telemetry'),
+            topic=mockup_target_name(getattr(config, 'MQTT_TOPIC', ''), 'daq/telemetry'),
             qos=getattr(config, 'MQTT_QOS', 0),
             username=getattr(config, 'MQTT_USERNAME', ''),
             password=getattr(config, 'MQTT_PASSWORD', ''),
@@ -754,11 +709,11 @@ def db_writer_thread():
             token=getattr(config, 'INFLUX_TOKEN', ''),
             org=getattr(config, 'INFLUX_ORG', 'mddp'),
             bucket=getattr(config, 'INFLUX_BUCKET', 'daq_telemetry'),
-            measurement=getattr(config, 'INFLUX_MEASUREMENT', 'daq_telemetry'),
+            measurement=mockup_target_name(getattr(config, 'INFLUX_MEASUREMENT', ''), 'daq_telemetry'),
             stop_event=stop_event
         )
     else:
-        client = TimescaleDBClient(MOCKUP_MOCKUP_DB_DSN, stop_event, MOCKUP_DB_NAME)
+        client = TimescaleDBClient(MOCKUP_DB_DSN, stop_event, MOCKUP_TABLE)
 
     if not client.connect():
         log.info(f"[MockWriter] Writer exiting (could not establish {destination} connection).")
@@ -905,18 +860,22 @@ def main():
     log.info(f"  Noise std   : {MOCKUP_NOISE_STD_V:.4f} V")
     if dest == 'mqtt':
         log.info(f"  MQTT Broker : {getattr(config, 'MQTT_BROKER', 'localhost')}:{getattr(config, 'MQTT_PORT', 1883)}")
-        log.info(f"  MQTT Topic  : {getattr(config, 'MQTT_TOPIC', 'daq/telemetry')}")
+        log.info(f"  MQTT Topic  : {mockup_target_name(getattr(config, 'MQTT_TOPIC', ''), 'daq/telemetry')}")
+    elif dest == 'influxdb':
+        log.info(f"  Influx bucket      : {getattr(config, 'INFLUX_BUCKET', 'daq_telemetry')}")
+        log.info(f"  Influx measurement : {mockup_target_name(getattr(config, 'INFLUX_MEASUREMENT', ''), 'daq_telemetry')}")
     else:
-        log.info(f"  DB DSN      : {MOCKUP_MOCKUP_DB_DSN}")
+        log.info(f"  DB DSN      : {MOCKUP_DB_DSN}")
+        log.info(f"  DB table    : {MOCKUP_TABLE}")
     log.info(f"  CSV output  : {MOCKUP_CSV_PATH or 'disabled'}")
     log.info("=" * 60)
 
     # ── Bootstrap DB (create database + schema if needed when destination is database) ──
-    if dest == 'database':
+    if dest not in ('mqtt', 'influxdb'):
         try:
             ensure_mockup_db()
         except Exception:
-            log.error("DB bootstrap failed — cannot continue. Check MOCKUP_DB_DSN in config.json.")
+            log.error("DB bootstrap failed — cannot continue. Check DB_DSN in config.json.")
             sys.exit(1)
 
     daq_thread = threading.Thread(

@@ -6,6 +6,8 @@ __pycache__/
 .musashi_ii.pid
 .musashi_iv.pid
 .plotter.pid
+.llm_interpret.pid
+.influxdb_mgr.pid
 services/daq_usb4716/.daq_process.pid
 services/daq_usb4716/.daq_process.mode
 services/daq_usb4716/daq_pipeline.log

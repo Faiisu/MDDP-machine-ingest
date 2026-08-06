@@ -1,0 +1,86 @@
+{
+  "channels": [
+    {
+      "channel": 0,
+      "type": "machine",
+      "signal": "speed_rpm",
+      "name": "Motor speed",
+      "unit": "rpm",
+      "depends_on": []
+    },
+    {
+      "channel": 1,
+      "type": "machine",
+      "signal": "load_percent",
+      "name": "Machine load",
+      "unit": "%",
+      "depends_on": []
+    },
+    {
+      "channel": 2,
+      "type": "machine",
+      "signal": "vibration_mm_s",
+      "name": "Vibration RMS",
+      "unit": "mm/s",
+      "depends_on": []
+    },
+    {
+      "channel": 3,
+      "type": "machine",
+      "signal": "bearing_temperature_c",
+      "name": "Bearing temperature",
+      "unit": "degC",
+      "depends_on": []
+    },
+    {
+      "channel": 4,
+      "type": "machine",
+      "signal": "motor_current_a",
+      "name": "Motor current",
+      "unit": "A",
+      "depends_on": []
+    },
+    {
+      "channel": 5,
+      "type": "machine",
+      "signal": "displacement_mm",
+      "name": "Shaft displacement",
+      "unit": "mm",
+      "depends_on": []
+    },
+    {
+      "channel": 6,
+      "type": "machine",
+      "signal": "acoustic_db",
+      "name": "Acoustic level",
+      "unit": "dB",
+      "depends_on": []
+    },
+    {
+      "channel": 90,
+      "type": "machine",
+      "signal": "health_state",
+      "name": "Simulator ground truth",
+      "unit": "class",
+      "training_label": true,
+      "depends_on": []
+    }
+  ],
+  "config_reload_seconds": 5,
+  "database": {
+    "host": "100.112.210.64",
+    "name": "postgres",
+    "password": "admin",
+    "port": 5432,
+    "table": "mockup",
+    "user": "admin"
+  },
+  "enabled": true,
+  "machine": {
+    "cycle_seconds": 300,
+    "faults_enabled": true,
+    "normal_fraction": 0.6,
+    "warning_fraction": 0.25
+  },
+  "period_seconds": 1
+}

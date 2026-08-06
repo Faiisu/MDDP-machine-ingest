@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DAQ Signal Simulator</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="console">
+    <header class="masthead">
+      <div><p class="eyebrow">DAQ / SIMULATOR</p><h1>Signal control</h1></div>
+      <div class="status"><span id="status-dot"></span><span id="status-text">Loading configuration</span></div>
+    </header>
+
+    <section class="control-strip" aria-label="Simulator controls">
+      <label class="toggle"><input id="enabled" type="checkbox"><span></span>Simulator enabled</label>
+      <label>Sample period <input id="period" type="number" min="0.1" step="0.1" required> <small>seconds</small></label>
+      <label>Reload interval <input id="reload" type="number" min="1" step="1" required> <small>seconds</small></label>
+      <label>Database table <select id="database-table" required><option value="">Loading tables…</option></select></label>
+      <button id="refresh-tables" class="quiet" type="button">Refresh tables</button>
+      <button id="save" type="button">Save changes</button>
+    </section>
+
+    <section class="workspace">
+      <div>
+        <div class="section-heading"><p class="eyebrow">CHANNELS</p><button id="add-channel" class="quiet" type="button">+ Add channel</button></div>
+        <div id="channels" class="channels"></div>
+      </div>
+      <aside class="info-panel">
+        <p class="eyebrow">WRITE TARGET</p>
+        <dl id="database"></dl>
+        <p class="hint">Only tables containing <code>time</code>, <code>channel</code>, and <code>value</code> are selectable. The simulator reloads this configuration within the selected reload interval. Machine signals share load and fault state, producing correlated speed, vibration, temperature, current, displacement, and acoustic measurements.</p>
+      </aside>
+    </section>
+
+    <section class="ml-panel" aria-labelledby="ml-summary-title">
+      <div class="section-heading"><div><p class="eyebrow">LLM / BACKEND</p><h2 id="ml-summary-title">Database summary process</h2></div><button id="save-ml-config" type="button">Save ML summary config</button></div>
+      <div class="ml-fields">
+        <label class="toggle"><input id="summary-enabled" type="checkbox"><span></span>Summary worker enabled</label>
+        <label>Source table <input id="summary-source-table" type="text" required placeholder="public.mockup"></label>
+        <label>Output table <input id="summary-output-table" type="text" required placeholder="public.ai-summarize"></label>
+        <label>Every <input id="summary-interval" type="number" min="1" step="1" required> <small>seconds</small></label>
+        <label>Data range <input id="summary-range" type="number" min="1" step="1" required> <small>seconds</small></label>
+        <label>Display timezone <input id="summary-timezone" type="text" required placeholder="Asia/Bangkok"></label>
+        <label>LLM model <input id="llm-model" type="text" placeholder="your-model-name"></label>
+        <label class="wide">OpenAI-compatible API URL <input id="llm-api-url" type="url" placeholder="https://api.openai.com/v1/chat/completions"></label>
+        <label>API-key environment variable <input id="llm-api-key-env" type="text" placeholder="OPENAI_API_KEY"></label>
+      </div>
+      <p class="hint">The worker reads the trained ML model and report, aggregates the selected source-table range, asks the configured LLM for exactly one sentence, then inserts it into the output table. API keys stay in the backend environment and are never saved here.</p>
+    </section>
+
+    <details>
+      <summary>Advanced JSON configuration</summary>
+      <textarea id="json-editor" spellcheck="false" aria-label="JSON configuration"></textarea>
+      <button id="apply-json" class="quiet" type="button">Apply JSON to form</button>
+    </details>
+    <p id="message" role="status" aria-live="polite"></p>
+  </main>
+  <template id="channel-template">
+    <article class="channel-card">
+      <div class="card-title"><span class="channel-label"></span><button class="remove" type="button">Remove</button></div>
+      <div class="fields">
+        <label>Channel <input class="channel-number" type="number" min="0" step="1"></label>
+        <label>Signal type <select class="channel-type"><option value="digital">Digital</option><option value="equation">Equation</option><option value="machine">Machine sensor</option></select></label>
+        <label class="digital-field">Stages <input class="digital-stages" type="text" placeholder="0, 1, 0, 1"></label>
+        <label class="digital-field">Change stage every <input class="stage-period" type="number" min="0" step="0.1"> <small>seconds</small></label>
+        <label class="equation-field">Equation <input class="equation" type="text" placeholder="2.5 + sin(t)"></label>
+        <label class="machine-field">Machine signal <select class="machine-signal"><option value="speed_rpm">Motor speed</option><option value="load_percent">Machine load</option><option value="vibration_mm_s">Vibration RMS</option><option value="bearing_temperature_c">Bearing temperature</option><option value="motor_current_a">Motor current</option><option value="displacement_mm">Shaft displacement</option><option value="acoustic_db">Acoustic level</option><option value="health_state">Simulator ground truth</option></select></label>
+        <label class="dependency-field">Add channels <input class="dependencies" type="text" placeholder="e.g. 10 * channel 1, 2"> <small>sum values; a multiplier is optional</small></label>
+      </div>
+    </article>
+  </template>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

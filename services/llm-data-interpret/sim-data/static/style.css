@@ -1,0 +1,35 @@
+:root { --ink:#13213c; --paper:#f4f7f8; --panel:#fff; --line:#cbd5dd; --blue:#007a9d; --cyan:#67e8f9; --warning:#f59e0b; }
+* { box-sizing:border-box; }
+body { margin:0; background:linear-gradient(135deg,#e7f1f3,#f7f5ee); color:var(--ink); font:16px/1.45 Inter, ui-sans-serif, system-ui, sans-serif; }
+.console { max-width:1180px; margin:0 auto; padding:42px 24px 64px; }
+.masthead { display:flex; align-items:end; justify-content:space-between; border-bottom:3px solid var(--ink); padding-bottom:18px; }
+.eyebrow { margin:0 0 5px; color:var(--blue); font:700 12px/1 ui-monospace,SFMono-Regular,monospace; letter-spacing:.14em; }
+h1 { margin:0; font-size:clamp(2.1rem,5vw,4.3rem); letter-spacing:-.06em; line-height:.9; }
+.status { display:flex; align-items:center; gap:8px; font:600 13px ui-monospace,SFMono-Regular,monospace; }
+#status-dot { width:10px; height:10px; border-radius:50%; background:var(--warning); box-shadow:0 0 0 4px #fef3c7; }
+#status-dot.live { background:#22c55e; box-shadow:0 0 0 4px #dcfce7; }
+.control-strip,.workspace { display:grid; gap:18px; margin-top:24px; }
+.control-strip { grid-template-columns:1.4fr 1fr 1fr auto; align-items:end; background:var(--ink); color:white; padding:20px; }
+label { display:grid; gap:6px; font-size:13px; font-weight:700; }
+input,select,textarea,button { font:inherit; }
+input,select { width:100%; border:1px solid var(--line); border-radius:2px; padding:9px; background:white; color:var(--ink); }
+small { font-weight:400; opacity:.7; }
+button { cursor:pointer; border:0; border-radius:2px; padding:10px 16px; background:var(--cyan); color:#063047; font-weight:800; }
+button:hover { filter:brightness(.94); }
+button.quiet,.remove { background:transparent; color:var(--blue); border:1px solid currentColor; padding:7px 10px; }
+.toggle { display:flex; align-items:center; gap:10px; padding-bottom:10px; }
+.toggle input { position:absolute; opacity:0; }
+.toggle span { width:38px; height:20px; background:#64748b; border-radius:20px; position:relative; }
+.toggle span:after { content:""; width:14px; height:14px; background:white; border-radius:50%; position:absolute; top:3px; left:3px; transition:.15s; }
+.toggle input:checked + span { background:#14b8a6; }.toggle input:checked + span:after { transform:translateX(18px); }
+.workspace { grid-template-columns:minmax(0,1fr) 250px; }
+.ml-panel { margin-top:24px; background:var(--panel); border:1px solid var(--line); box-shadow:5px 5px 0 rgba(19,33,60,.08); padding:20px; }
+h2 { margin:0; font-size:1.4rem; letter-spacing:-.03em; }.ml-fields { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; align-items:end; }.ml-fields .toggle { color:var(--ink); padding-bottom:10px; }.wide { grid-column:span 2; }
+.section-heading { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.channels { display:grid; gap:12px; }
+.channel-card,.info-panel,details { background:var(--panel); border:1px solid var(--line); box-shadow:5px 5px 0 rgba(19,33,60,.08); }
+.channel-card { padding:16px; }.card-title { display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; font:700 13px ui-monospace,SFMono-Regular,monospace; }
+.fields { display:grid; grid-template-columns:100px 140px 1fr 1fr; gap:12px; }.equation-field { grid-column:span 2; }
+.info-panel { padding:20px; } dl { margin:0; font:14px ui-monospace,SFMono-Regular,monospace; } dt { color:#64748b; margin-top:12px; } dd { margin:0; overflow-wrap:anywhere; }.hint { font-size:13px; color:#516076; margin-top:26px; } code { color:var(--blue); }
+details { margin-top:24px; padding:14px; } summary { cursor:pointer; font-weight:700; } textarea { width:100%; min-height:260px; margin:14px 0 8px; padding:12px; border:1px solid var(--line); background:#13213c; color:#d9f7ff; font:13px/1.4 ui-monospace,SFMono-Regular,monospace; } #message { min-height:1.5em; font-weight:600; } #message.error { color:#b91c1c; }
+@media (max-width:760px) { .masthead,.workspace { display:block; }.status { margin-top:20px; }.control-strip,.fields,.ml-fields { grid-template-columns:1fr; }.equation-field,.wide { grid-column:auto; }.info-panel { margin-top:18px; } }

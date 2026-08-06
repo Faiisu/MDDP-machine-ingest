@@ -9,6 +9,7 @@ set "DAQ_PID_FILE=.daq.pid"
 set "MUSASHI_II_PID_FILE=.musashi_ii.pid"
 set "MUSASHI_IV_PID_FILE=.musashi_iv.pid"
 set "PLOTTER_PID_FILE=.plotter.pid"
+set "LLM_INTERPRET_PID_FILE=.llm_interpret.pid"
 set "INFLUXDB_MGR_PID_FILE=.influxdb_mgr.pid"
 
 rem Safeguard check to prevent starting duplicate instances
@@ -17,6 +18,7 @@ if exist "%DAQ_PID_FILE%" goto :already_running
 if exist "%MUSASHI_II_PID_FILE%" goto :already_running
 if exist "%MUSASHI_IV_PID_FILE%" goto :already_running
 if exist "%PLOTTER_PID_FILE%" goto :already_running
+if exist "%LLM_INTERPRET_PID_FILE%" goto :already_running
 if exist "%INFLUXDB_MGR_PID_FILE%" goto :already_running
 goto :start_services
 
@@ -81,7 +83,12 @@ echo [SYSTEM] Starting Database Plotter on Port 8084 (all interfaces)...
 start "MDDP_PLOTTER_SERVICE" /min cmd /c "title MDDP_PLOTTER_SERVICE && %PYTHON_BIN% services\plotter\app.py >> logs\plotter.log 2>&1"
 echo 1 > "%PLOTTER_PID_FILE%"
 
-rem 6. Start InfluxDB Manager (Port 18085)
+rem 6. Start LLM Interpretation Worker (Port 8085)
+echo [SYSTEM] Starting LLM Interpretation Worker on Port 8085 (all interfaces)...
+start "MDDP_LLM_INTERPRET" /min cmd /c "title MDDP_LLM_INTERPRET && %PYTHON_BIN% services\llm-interpret\app.py >> logs\llm_interpret.log 2>&1"
+echo 1 > "%LLM_INTERPRET_PID_FILE%"
+
+rem 7. Start InfluxDB Manager (Port 18085)
 echo [SYSTEM] Starting InfluxDB Manager on Port 18085 (all interfaces)...
 start "MDDP_INFLUXDB_MANAGER" /min cmd /c "title MDDP_INFLUXDB_MANAGER && %PYTHON_BIN% services\influxdb\app.py >> logs\influxdb_manager.log 2>&1"
 echo 1 > "%INFLUXDB_MGR_PID_FILE%"

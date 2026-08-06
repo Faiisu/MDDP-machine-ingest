@@ -1,0 +1,182 @@
+{
+  "schema": "machine-quality-inference/v1",
+  "generated_at": "2026-08-06T17:40:57.476255+00:00",
+  "sample_time": "2026-08-06T17:38:46.001103+00:00",
+  "machine_quality": {
+    "status": "warning",
+    "health_percent": 70.48,
+    "anomaly_score": 20.815453,
+    "warning_threshold": 8.491982606819292,
+    "critical_threshold": 60.2731968978936
+  },
+  "top_contributors": [
+    {
+      "channel": 2,
+      "name": "Vibration RMS",
+      "signal": "vibration_mm_s",
+      "unit": "mm/s",
+      "value": 2.902169741916356,
+      "deviation_sigma": 4.89854360075994
+    },
+    {
+      "channel": 5,
+      "name": "Shaft displacement",
+      "signal": "displacement_mm",
+      "unit": "mm",
+      "value": 0.10090485170719035,
+      "deviation_sigma": 3.581258490502461
+    },
+    {
+      "channel": 0,
+      "name": "Motor speed",
+      "signal": "speed_rpm",
+      "unit": "rpm",
+      "value": 1465.9549286006074,
+      "deviation_sigma": -1.5766785958347727
+    }
+  ],
+  "sensor_readings": [
+    {
+      "channel": 2,
+      "name": "Vibration RMS",
+      "signal": "vibration_mm_s",
+      "unit": "mm/s",
+      "value": 2.902169741916356,
+      "deviation_sigma": 4.89854360075994
+    },
+    {
+      "channel": 5,
+      "name": "Shaft displacement",
+      "signal": "displacement_mm",
+      "unit": "mm",
+      "value": 0.10090485170719035,
+      "deviation_sigma": 3.581258490502461
+    },
+    {
+      "channel": 0,
+      "name": "Motor speed",
+      "signal": "speed_rpm",
+      "unit": "rpm",
+      "value": 1465.9549286006074,
+      "deviation_sigma": -1.5766785958347727
+    },
+    {
+      "channel": 6,
+      "name": "Acoustic level",
+      "signal": "acoustic_db",
+      "unit": "dB",
+      "value": 63.09870763505829,
+      "deviation_sigma": 1.5045943400221433
+    },
+    {
+      "channel": 3,
+      "name": "Bearing temperature",
+      "signal": "bearing_temperature_c",
+      "unit": "degC",
+      "value": 53.949122555819336,
+      "deviation_sigma": 1.0009050014394623
+    },
+    {
+      "channel": 4,
+      "name": "Motor current",
+      "signal": "motor_current_a",
+      "unit": "A",
+      "value": 8.46282628962937,
+      "deviation_sigma": 0.4559033819528517
+    },
+    {
+      "channel": 1,
+      "name": "Machine load",
+      "signal": "load_percent",
+      "unit": "%",
+      "value": 61.14674462129598,
+      "deviation_sigma": -0.0708331470797906
+    }
+  ],
+  "alerts": [
+    "Machine state is warning; inspect Vibration RMS and related sensors."
+  ],
+  "simulator_ground_truth": "warning",
+  "learned_relationships": [
+    {
+      "channel_a": 3,
+      "sensor_a": "Bearing temperature",
+      "channel_b": 6,
+      "sensor_b": "Acoustic level",
+      "pearson_r": 0.98718,
+      "direction": "same",
+      "strength": "very_strong"
+    },
+    {
+      "channel_a": 2,
+      "sensor_a": "Vibration RMS",
+      "channel_b": 5,
+      "sensor_b": "Shaft displacement",
+      "pearson_r": 0.985535,
+      "direction": "same",
+      "strength": "very_strong"
+    },
+    {
+      "channel_a": 5,
+      "sensor_a": "Shaft displacement",
+      "channel_b": 6,
+      "sensor_b": "Acoustic level",
+      "pearson_r": 0.977961,
+      "direction": "same",
+      "strength": "very_strong"
+    },
+    {
+      "channel_a": 2,
+      "sensor_a": "Vibration RMS",
+      "channel_b": 6,
+      "sensor_b": "Acoustic level",
+      "pearson_r": 0.96172,
+      "direction": "same",
+      "strength": "very_strong"
+    },
+    {
+      "channel_a": 3,
+      "sensor_a": "Bearing temperature",
+      "channel_b": 5,
+      "sensor_b": "Shaft displacement",
+      "pearson_r": 0.937699,
+      "direction": "same",
+      "strength": "very_strong"
+    },
+    {
+      "channel_a": 3,
+      "sensor_a": "Bearing temperature",
+      "channel_b": 4,
+      "sensor_b": "Motor current",
+      "pearson_r": 0.93498,
+      "direction": "same",
+      "strength": "very_strong"
+    },
+    {
+      "channel_a": 2,
+      "sensor_a": "Vibration RMS",
+      "channel_b": 3,
+      "sensor_b": "Bearing temperature",
+      "pearson_r": 0.921155,
+      "direction": "same",
+      "strength": "very_strong"
+    },
+    {
+      "channel_a": 4,
+      "sensor_a": "Motor current",
+      "channel_b": 6,
+      "sensor_b": "Acoustic level",
+      "pearson_r": 0.868438,
+      "direction": "same",
+      "strength": "strong"
+    }
+  ],
+  "llm_context": {
+    "instruction": "Explain machine quality from the ML result and live sensor readings. Do not claim causation or invent a fault component.",
+    "summary": "ML status=warning, health=70.5%, anomaly_score=20.82."
+  },
+  "model": {
+    "schema": "machine-quality-model/v1",
+    "created_at": "2026-08-06T17:40:51.801661+00:00"
+  }
+}

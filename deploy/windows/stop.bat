@@ -9,6 +9,7 @@ set "DAQ_PID_FILE=.daq.pid"
 set "MUSASHI_II_PID_FILE=.musashi_ii.pid"
 set "MUSASHI_IV_PID_FILE=.musashi_iv.pid"
 set "PLOTTER_PID_FILE=.plotter.pid"
+set "LLM_INTERPRET_PID_FILE=.llm_interpret.pid"
 set "INFLUXDB_MGR_PID_FILE=.influxdb_mgr.pid"
 
 echo ==========================================================
@@ -55,7 +56,15 @@ for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr /r /c:":8084 .*LISTENI
 )
 if exist "%PLOTTER_PID_FILE%" del "%PLOTTER_PID_FILE%"
 
-rem 6. Stop InfluxDB Manager
+rem 6. Stop LLM Interpretation Worker
+echo [SYSTEM] Stopping LLM Interpretation Worker...
+taskkill /fi "WINDOWTITLE eq MDDP_LLM_INTERPRET*" /t /f >nul 2>&1
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr /r /c:":8085 .*LISTENING"') do (
+    taskkill /f /pid %%a >nul 2>&1
+)
+if exist "%LLM_INTERPRET_PID_FILE%" del "%LLM_INTERPRET_PID_FILE%"
+
+rem 7. Stop InfluxDB Manager
 echo [SYSTEM] Stopping InfluxDB Manager...
 taskkill /fi "WINDOWTITLE eq MDDP_INFLUXDB_MANAGER*" /t /f >nul 2>&1
 for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr /r /c:":18085 .*LISTENING"') do (

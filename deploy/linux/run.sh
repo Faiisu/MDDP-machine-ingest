@@ -13,11 +13,12 @@ PORTAL_PID_FILE=".portal.pid"
 MUSASHI_II_PID_FILE=".musashi_ii.pid"
 MUSASHI_IV_PID_FILE=".musashi_iv.pid"
 PLOTTER_PID_FILE=".plotter.pid"
+LLM_INTERPRET_PID_FILE=".llm_interpret.pid"
 
 INFLUXDB_MGR_PID_FILE=".influxdb_mgr.pid"
 
 # Safeguard check to prevent starting duplicate instances
-if [ -f "$PORTAL_PID_FILE" ] || [ -f "$DAQ_PID_FILE" ] || [ -f "$MUSASHI_II_PID_FILE" ] || [ -f "$MUSASHI_IV_PID_FILE" ] || [ -f "$PLOTTER_PID_FILE" ] || [ -f "$INFLUXDB_MGR_PID_FILE" ]; then
+if [ -f "$PORTAL_PID_FILE" ] || [ -f "$DAQ_PID_FILE" ] || [ -f "$MUSASHI_II_PID_FILE" ] || [ -f "$MUSASHI_IV_PID_FILE" ] || [ -f "$PLOTTER_PID_FILE" ] || [ -f "$LLM_INTERPRET_PID_FILE" ] || [ -f "$INFLUXDB_MGR_PID_FILE" ]; then
     echo "[SYSTEM] Warning: PID files detected. Services may already be running."
     echo "[SYSTEM] Please run ./deploy/linux/stop.sh before starting again."
     exit 1
@@ -74,7 +75,12 @@ echo "[SYSTEM] Starting Database Plotter on Port 8084 (all interfaces)..."
 nohup $PYTHON_BIN services/plotter/app.py >/dev/null 2>&1 &
 echo $! > "$PLOTTER_PID_FILE"
 
-# 6. Start InfluxDB Manager (Port 18085)
+# 6. Start LLM Interpretation Worker (Port 8085)
+echo "[SYSTEM] Starting LLM Interpretation Worker on Port 8085 (all interfaces)..."
+nohup $PYTHON_BIN services/llm-interpret/app.py >/dev/null 2>&1 &
+echo $! > "$LLM_INTERPRET_PID_FILE"
+
+# 7. Start InfluxDB Manager (Port 18085)
 echo "[SYSTEM] Starting InfluxDB Manager on Port 18085 (all interfaces)..."
 nohup $PYTHON_BIN services/influxdb/app.py >/dev/null 2>&1 &
 echo $! > "$INFLUXDB_MGR_PID_FILE"
@@ -85,5 +91,6 @@ echo "[SYSTEM] DAQ Control: http://localhost:8081"
 echo "[SYSTEM] Musashi II:  http://localhost:8082"
 echo "[SYSTEM] Musashi IV:  http://localhost:8083"
 echo "[SYSTEM] Plotter:     http://localhost:8084"
+echo "[SYSTEM] LLM Interpret: http://localhost:8085"
 echo "[SYSTEM] InfluxDB:    http://localhost:18085"
 echo "=========================================================="

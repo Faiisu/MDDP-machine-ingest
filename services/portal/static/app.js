@@ -1,4 +1,4 @@
-const servicePorts = [8081, 8082, 8083, 8084, 18085, 8086];
+const servicePorts = [8081, 8082, 8083, 8084, 8085, 18085, 8086];
 
 function getHostForUrl() {
     const hostname = window.location.hostname || 'localhost';

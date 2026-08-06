@@ -13,6 +13,7 @@ PORTAL_PID_FILE=".portal.pid"
 MUSASHI_II_PID_FILE=".musashi_ii.pid"
 MUSASHI_IV_PID_FILE=".musashi_iv.pid"
 PLOTTER_PID_FILE=".plotter.pid"
+LLM_INTERPRET_PID_FILE=".llm_interpret.pid"
 INFLUXDB_MGR_PID_FILE=".influxdb_mgr.pid"
 
 echo "=========================================================="
@@ -89,7 +90,21 @@ else
     echo "[SYSTEM] Telemetry Visualizer is already stopped."
 fi
 
-# 6. Stop InfluxDB Manager
+# 6. Stop LLM Interpretation Worker
+if [ -f "$LLM_INTERPRET_PID_FILE" ]; then
+    PID=$(cat "$LLM_INTERPRET_PID_FILE")
+    if ps -p "$PID" >/dev/null 2>&1; then
+        echo "[SYSTEM] Stopping LLM Interpretation Worker (PID: $PID)..."
+        kill "$PID" 2>/dev/null
+    else
+        echo "[SYSTEM] LLM Interpretation Worker process not found."
+    fi
+    rm "$LLM_INTERPRET_PID_FILE"
+else
+    echo "[SYSTEM] LLM Interpretation Worker is already stopped."
+fi
+
+# 7. Stop InfluxDB Manager
 if [ -f "$INFLUXDB_MGR_PID_FILE" ]; then
     PID=$(cat "$INFLUXDB_MGR_PID_FILE")
     if ps -p "$PID" >/dev/null 2>&1; then

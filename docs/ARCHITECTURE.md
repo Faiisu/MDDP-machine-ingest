@@ -19,6 +19,7 @@ flowchart TB
         S2[Musashi II console :8082]
         S4[Musashi IV console :8083]
         PLOT[Plotter :8084]
+        LLM[LLM interpret :8085]
         IM[Influx manager :18085]
     end
 
@@ -32,6 +33,7 @@ flowchart TB
     PORTAL --> S2
     PORTAL --> S4
     PORTAL --> PLOT
+    PORTAL --> LLM
     PORTAL --> IM
     PORTAL --> IN
     USB --> DAQ
@@ -46,6 +48,8 @@ flowchart TB
     S4 --> PG
     S4 --> IN
     PLOT --> PG
+    LLM --> PG
+    LLM -.->|HTTP JSON| MODEL[Custom LLM server]
     IM --> IN
 ```
 
@@ -80,6 +84,10 @@ Musashi II reads serial data and Musashi IV reads an HTTP device API. Their cont
 5. Discovers an operator token from the container when possible.
 6. Applies retention rules through the InfluxDB v2 HTTP API.
 7. Synchronizes the connection settings to the DAQ service.
+
+### LLM interpretation worker
+
+`services/llm-interpret/app.py` starts a scheduler and a small health/control API. For each completed configured interval it queries the source time-series table, computes per-channel descriptive statistics, threshold counts, z-score anomalies, and bucketed Pearson correlations, then sends that compact result to the configured custom LLM. The final plain-text summary and metrics JSON are upserted into `llm_interpret_summaries`. A deterministic summary is stored when the LLM is unavailable, so a failed model request does not discard a completed database window.
 
 ## Data contracts
 

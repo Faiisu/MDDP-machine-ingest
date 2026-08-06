@@ -1,0 +1,27 @@
+{
+  "database_source": {
+    "host": "100.112.210.64",
+    "name": "postgres",
+    "password": "admin",
+    "port": 5432,
+    "table": "public.mockup",
+    "user": "admin"
+  },
+  "llm": {
+    "api_key_env": "OPENAI_API_KEY",
+    "api_url": "https://gateway.9arm.co/v1/chat/completions",
+    "model": "qwen3.6-35b-a3b",
+    "timeout_seconds": 30
+  },
+  "realtime_inference": {
+    "poll_seconds": 1,
+    "window_seconds": 10
+  },
+  "summarization": {
+    "enabled": true,
+    "interval_seconds": 60,
+    "output_table": "public.ai-summarize",
+    "range_seconds": 300,
+    "timezone": "Asia/Bangkok"
+  }
+}

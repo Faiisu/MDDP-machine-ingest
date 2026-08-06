@@ -64,6 +64,7 @@ a { color: inherit; }
 .service-daq { --service-color: var(--blue); }
 .service-musashi { --service-color: var(--orange); }
 .service-plotter { --service-color: var(--violet); }
+.service-llm { --service-color: #8b5cf6; }
 .service-influx { --service-color: var(--green); }
 .service-data { --service-color: #00a3bf; }
 .service-top, .service-footer { display: flex; align-items: center; justify-content: space-between; }
