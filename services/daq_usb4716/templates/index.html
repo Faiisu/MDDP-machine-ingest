@@ -150,7 +150,7 @@
                                 </div>
                             </div>
                             <div class="data-size-subtext mono">
-                                Calculated from Clock Rate × Active Channels × Row Payload (~40 B)
+                                Hardware clock drives acquisition; each channel can use its own save rate (~40 B per row)
                             </div>
                         </div>
 
@@ -203,7 +203,6 @@
                     <!-- PANEL 2: Hardware & Sampling + Channel Matrix -->
                     <div id="panel-hardware" class="workspace-panel hidden">
                         <input type="hidden" id="ENABLE_AI" name="ENABLE_AI" value="true">
-                        <input type="hidden" id="ENABLE_DI" name="ENABLE_DI" value="true">
                         <input type="hidden" id="CHANNEL_COUNT" name="CHANNEL_COUNT" value="8">
                         <input type="hidden" id="START_CHANNEL" name="START_CHANNEL" value="0">
                         <div class="panel-header">
@@ -222,15 +221,15 @@
                         <div class="form-row">
                             <div class="form-group flex-2">
                                 <label for="DEVICE_DESCRIPTION">Device Description / Connection Port</label>
-                                <div class="scan-input-group" style="position:relative;">
+                                <div class="scan-input-group">
                                     <input type="text" id="DEVICE_DESCRIPTION" name="DEVICE_DESCRIPTION" required placeholder="e.g. USB-4716,BID#0">
-                                    <button type="button" id="btn-scan-usb" class="btn-scan-usb" title="Scan host for USB & DAQ ports">
+                                    <button type="button" id="btn-scan-usb" class="btn-scan-usb" title="Scan host for USB & DAQ ports" aria-haspopup="listbox" aria-expanded="false">
                                         <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" class="scan-icon">
                                             <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
                                         </svg>
                                         <span>Scan USB</span>
                                     </button>
-                                    <div id="scanned-devices-menu" class="scanned-devices-menu hidden"></div>
+                                    <div id="scanned-devices-menu" class="scanned-devices-menu hidden" role="listbox" aria-label="Detected USB and DAQ devices" aria-busy="false"></div>
                                 </div>
                             </div>
                             <div class="form-group flex-1">
@@ -241,7 +240,7 @@
 
                         <div class="form-row">
                             <div class="form-group">
-                                <label for="CLOCK_RATE">Clock Rate (Hz)</label>
+                                <label for="CLOCK_RATE">Hardware Clock Rate (Hz)</label>
                                 <input type="number" id="CLOCK_RATE" name="CLOCK_RATE" min="1" required>
                             </div>
                             <div class="form-group">
@@ -257,9 +256,25 @@
                                 <input type="number" id="QUEUE_MAXSIZE" name="QUEUE_MAXSIZE" min="1" required>
                             </div>
                         </div>
+                        <div class="field-help rate-help">Hardware Clock Rate is the rate used to acquire data from the USB-4716. Save Rate controls the database rate for each channel; leave it blank to inherit the source rate.</div>
 
-                        <!-- Channel & Port Ingestion Matrix -->
-                        <div class="section-divider-title">Channel &amp; Port Ingestion Matrix</div>
+                        <!-- Digital Input (DI) Channel Settings -->
+                        <div class="section-divider-title">Digital Input (DI) Channels</div>
+                        <div class="field-help di-help">Enable or disable DI0–DI7 independently in the matrix below. The system reads one byte from the USB-4716 internal DI port and stores only the selected channels.</div>
+                        <input type="hidden" id="ENABLE_DI" name="ENABLE_DI" value="false">
+                        <input type="hidden" id="DI_START_PORT" name="DI_START_PORT" value="0">
+                        <input type="hidden" id="DI_END_PORT" name="DI_END_PORT" value="0">
+                        <input type="hidden" id="DI_PORT_COUNT" name="DI_PORT_COUNT" value="1">
+                        <div class="form-row" id="di-sampling-fields">
+                            <div class="form-group">
+                                <label for="DI_CHANNEL_OFFSET">DB Channel Offset</label>
+                                <input type="number" id="DI_CHANNEL_OFFSET" name="DI_CHANNEL_OFFSET" min="0" value="100" required>
+                            </div>
+                            <div class="field-help di-selection-summary" id="di-selection-summary">Select channels in the matrix below.</div>
+                        </div>
+
+                        <!-- Channel Ingestion Matrix -->
+                        <div class="section-divider-title">Channel Ingestion Matrix</div>
                         <div class="table-toolbar">
                             <div class="tab-filters" id="matrix-tab-filters">
                                 <button type="button" class="tab-btn active" data-filter="all">All Channels</button>
@@ -267,7 +282,7 @@
                                 <button type="button" class="tab-btn" data-filter="di">Digital Input (DI)</button>
                             </div>
                             <div class="table-info-meta mono">
-                                <span>8 AI Channels · 8 DI Bits</span>
+                                <span id="matrix-meta-info">Select AI and DI channels from the matrix below.</span>
                             </div>
                         </div>
 
@@ -275,9 +290,10 @@
                             <table class="ingestion-table">
                                 <thead>
                                     <tr>
-                                        <th style="width: 130px;">Channel / Port</th>
+                                        <th style="width: 130px;">Channel</th>
                                         <th style="width: 100px;">Type</th>
                                         <th style="width: 90px; text-align: center;">Stream</th>
+                                        <th style="width: 115px; text-align: center;">Save Rate (Hz)</th>
                                         <th style="width: 110px; text-align: center;">Linear Scale</th>
                                         <th>Low Volt (V)</th>
                                         <th>High Volt (V)</th>
@@ -286,7 +302,7 @@
                                     </tr>
                                 </thead>
                                 <tbody id="ingestion-matrix-tbody">
-                                    <!-- Dynamically generated rows for AI0..AI7 and DI0..DI7 -->
+                                    <!-- Dynamically generated rows for AI channels and DI bits -->
                                 </tbody>
                             </table>
                         </div>
@@ -527,7 +543,7 @@
                     </div>
                     <div class="meta-box">
                         <span class="meta-label">Active Channels</span>
-                        <span class="meta-val" id="modal-meta-ch">8 AI · 8 DI</span>
+                        <span class="meta-val" id="modal-meta-ch">0 AI · 0 DI</span>
                     </div>
                     <div class="meta-box">
                         <span class="meta-label">Estimated Rate</span>

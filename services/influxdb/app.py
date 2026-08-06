@@ -68,17 +68,26 @@ def run_docker_compose(cmd_list):
         return False, str(e)
 
 def auto_discover_token():
-    """Attempts to discover operator token from mddp-influxdb docker container."""
+    """Attempts to discover or create operator token from mddp-influxdb docker container."""
     try:
         cmd = ['docker', 'exec', 'mddp-influxdb', 'influx', 'auth', 'list', '--json']
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         if res.returncode == 0:
             auth_list = json.loads(res.stdout)
-            if isinstance(auth_list, list) and len(auth_list) > 0:
-                # Get token from first auth object
-                tok = auth_list[0].get('token')
-                if tok:
-                    return tok
+            if isinstance(auth_list, list):
+                for auth in auth_list:
+                    tok = auth.get('token')
+                    if tok:
+                        return tok
+        # If no visible token found, attempt to create an all-access token
+        cfg = read_config()
+        org = cfg.get('INFLUX_ORG', 'PTT')
+        create_cmd = ['docker', 'exec', 'mddp-influxdb', 'influx', 'auth', 'create', '--all-access', '--org', org, '--json']
+        res_create = subprocess.run(create_cmd, capture_output=True, text=True, timeout=10)
+        if res_create.returncode == 0:
+            auth_obj = json.loads(res_create.stdout)
+            if isinstance(auth_obj, dict) and auth_obj.get('token'):
+                return auth_obj.get('token')
     except Exception as e:
         print(f"[DEBUG] Token discovery notice: {e}")
     return None

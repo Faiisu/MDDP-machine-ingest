@@ -135,7 +135,8 @@ The DAQ configuration is [`services/daq_usb4716/config.json`](services/daq_usb47
 | `INFLUX_TOKEN` | Token used for InfluxDB writes. | Secret value |
 | `START_CHANNEL` | First channel to scan. | `0` |
 | `CHANNEL_COUNT` | Number of analog channels. | `1` to `8` |
-| `CLOCK_RATE` | Samples per second per channel. | `2000` |
+| `CLOCK_RATE` | Hardware acquisition clock shared by active AI channels. | `2000` |
+| `CHANNEL_SAMPLE_RATES` | Optional per-channel database save rates; blank/absent inherits the source rate. | `{"AI0":1000,"DI0":1}` |
 | `SECTION_LENGTH` | Samples per ingestion batch. | `500` |
 | `QUEUE_MAXSIZE` | Maximum in-memory queue depth. | `200` |
 | `MQTT_BROKER` | MQTT host when destination is MQTT. | `localhost` |

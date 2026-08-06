@@ -1,5 +1,6 @@
 # tests/test_save_config.py
 import unittest
+import copy
 import json
 import os
 import sys
@@ -44,9 +45,9 @@ class TestSaveConfigSystem(unittest.TestCase):
         self.assertEqual(updated_cfg.get("CLOCK_RATE"), 2500)
 
     def test_post_api_config_endpoint(self):
-        payload = self.original_config.copy()
+        payload = copy.deepcopy(self.original_config)
         payload["DI_START_PORT"] = 0
-        payload["DI_PORT_COUNT"] = 2
+        payload["DI_PORT_COUNT"] = 1
         payload["DI_CHANNEL_OFFSET"] = 100
         payload["SCALE_CONFIGS"]["0"] = {
             "enabled": True,
@@ -68,7 +69,7 @@ class TestSaveConfigSystem(unittest.TestCase):
 
         # Verify disk persistence
         saved_cfg = read_config()
-        self.assertEqual(saved_cfg.get("DI_PORT_COUNT"), 2)
+        self.assertEqual(saved_cfg.get("DI_PORT_COUNT"), 1)
         self.assertEqual(saved_cfg.get("SCALE_CONFIGS", {}).get("0", {}).get("low_value"), -50.0)
 
 

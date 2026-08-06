@@ -59,6 +59,11 @@ except Exception as _bdaq_err:
     AdxEnumToString = None
     BioFailed = Exception
 
+try:
+    from services.daq_usb4716.rate_control import ChannelRateLimiter, normalize_channel_sample_rates
+except ImportError:
+    from rate_control import ChannelRateLimiter, normalize_channel_sample_rates
+
 import json
 from types import SimpleNamespace
 
@@ -93,6 +98,41 @@ stats = {
 }
 
 
+def read_di_snapshot(di_ctrl, start_port, port_count):
+    """Read DI bytes while respecting the ports exposed by the device.
+
+    ``InstantDiCtrl.readAny`` returns one byte per port.  A stale config can
+    request more ports than a USB-4716 exposes, so clamp the request instead
+    of failing the whole acquisition loop.
+    """
+    start_port = int(start_port)
+    port_count = int(port_count)
+    if start_port < 0 or port_count < 1:
+        raise ValueError('DI start port must be non-negative and port count must be positive.')
+
+    available_ports = getattr(di_ctrl, 'portCount', None)
+    if available_ports is not None:
+        available_ports = int(available_ports)
+        if start_port >= available_ports:
+            raise ValueError(
+                f'DI start port {start_port} is outside the device port range '
+                f'(0-{max(available_ports - 1, 0)}).'
+            )
+        effective_count = min(port_count, available_ports - start_port)
+        if effective_count != port_count:
+            log.warning(
+                f'DI request clipped from {port_count} to {effective_count} '
+                f'port(s); device exposes {available_ports}.'
+            )
+    else:
+        effective_count = port_count
+
+    ret, data = di_ctrl.readAny(start_port, effective_count)
+    if BioFailed(ret):
+        raise RuntimeError(f'DAQ DI readAny() failed: {ret}')
+    return [int(value) & 0xFF for value in data]
+
+
 # ─── DAQ Reader Thread ────────────────────────────────────────────────────────
 def daq_reader_thread():
     """
@@ -100,9 +140,10 @@ def daq_reader_thread():
     Does minimal work — copies returned AI data and reads DI port states, then enqueues.
     """
     enable_ai = getattr(config, 'ENABLE_AI', True)
-    enable_di = getattr(config, 'ENABLE_DI', True)
-    di_start_port = getattr(config, 'DI_START_PORT', 0)
-    di_port_count = getattr(config, 'DI_PORT_COUNT', 1)
+    di_channels = getattr(config, 'DI_CHANNELS', None)
+    enable_di = any(di_channels) if di_channels is not None else getattr(config, 'ENABLE_DI', True)
+    di_start_port = int(getattr(config, 'DI_START_PORT', 0))
+    di_port_count = int(getattr(config, 'DI_PORT_COUNT', 1))
 
     wf = None
     di_ctrl = None
@@ -145,7 +186,25 @@ def daq_reader_thread():
                 di_ctrl = InstantDiCtrl(config.DEVICE_DESCRIPTION)
                 if hasattr(di_ctrl, 'loadProfile'):
                     di_ctrl.loadProfile = config.PROFILE_PATH
-                log.info(f"DAQ DI initialized | device={config.DEVICE_DESCRIPTION} | startPort={di_start_port} | portCount={di_port_count}")
+                available_di_ports = getattr(di_ctrl, 'portCount', None)
+                if available_di_ports is not None:
+                    available_di_ports = int(available_di_ports)
+                    if di_start_port >= available_di_ports:
+                        raise ValueError(
+                            f"start port {di_start_port} is outside the device range "
+                            f"(0-{max(available_di_ports - 1, 0)})"
+                        )
+                    effective_di_port_count = min(di_port_count, available_di_ports - di_start_port)
+                    if effective_di_port_count != di_port_count:
+                        log.warning(
+                            f"Configured DI port count {di_port_count} exceeds the device's "
+                            f"{available_di_ports} port(s); using {effective_di_port_count}."
+                        )
+                        di_port_count = effective_di_port_count
+                log.info(
+                    f"DAQ DI initialized | device={config.DEVICE_DESCRIPTION} | "
+                    f"startPort={di_start_port} | portCount={di_port_count}"
+                )
             except Exception as di_err:
                 log.error(f"Failed to initialize InstantDiCtrl: {di_err}")
                 di_ctrl = None
@@ -178,9 +237,7 @@ def daq_reader_thread():
             di_bytes = []
             if enable_di and di_ctrl is not None:
                 try:
-                    ret_di, di_data = di_ctrl.readAny(di_start_port, di_port_count)
-                    if not BioFailed(ret_di):
-                        di_bytes = list(di_data)
+                    di_bytes = read_di_snapshot(di_ctrl, di_start_port, di_port_count)
                 except Exception as read_di_err:
                     log.warning(f"Error reading DI: {read_di_err}")
 
@@ -251,13 +308,22 @@ class DaqSampleParser:
     """
     Responsibility: Parse interleaved raw DAQ data (AI and DI) and compute timestamps relative to a periodic anchor.
     """
-    def __init__(self, start_channel, channel_count, clock_rate, calibrator, di_channel_offset=100, enable_di=True, recalibrate_interval_hr=24.0):
+    def __init__(self, start_channel, channel_count, clock_rate, calibrator, di_channel_offset=100, enable_di=True, di_channels=None, channel_sample_rates=None, recalibrate_interval_hr=24.0):
         self.start_channel = start_channel
         self.channel_count = channel_count
         self.dt_ns = int(1_000_000_000 / clock_rate)
         self.calibrator = calibrator
         self.di_channel_offset = di_channel_offset
         self.enable_di = enable_di
+        self.di_channels = None if di_channels is None else {
+            int(bit) for bit, selected in enumerate(di_channels) if selected
+        }
+        self.channel_sample_rates = normalize_channel_sample_rates(
+            channel_sample_rates or {},
+            hardware_rate=clock_rate,
+            section_length=getattr(config, 'SECTION_LENGTH', 500),
+        )
+        self.rate_limiter = ChannelRateLimiter(self.channel_sample_rates)
         
         # Periodic anchor state configuration
         self.recalibrate_interval_ns = int(recalibrate_interval_hr * 3600 * 1_000_000_000)
@@ -277,6 +343,8 @@ class DaqSampleParser:
             self.samples_since_anchor = 0
             
         rows = []
+        batch_sample_ts_ns = self.anchor_time_ns + self.samples_since_anchor * self.dt_ns
+        batch_sample_ts = datetime.fromtimestamp(batch_sample_ts_ns / 1_000_000_000, tz=timezone.utc)
         for s in range(samples_per_channel):
             # Calculate forward timestamp based on cumulative samples since the last anchor
             sample_ts_ns = self.anchor_time_ns + (self.samples_since_anchor + s) * self.dt_ns
@@ -285,18 +353,29 @@ class DaqSampleParser:
             # Process Analog Input channels
             if returned_count > 0 and self.channel_count > 0:
                 for ch in range(self.channel_count):
+                    channel_key = f'AI{self.start_channel + ch}'
+                    if not self.rate_limiter.should_emit(channel_key, sample_ts_ns):
+                        continue
                     value = raw_data[s * self.channel_count + ch]
                     value = self.calibrator.calibrate(ch, value)
                     value = round(value, 3)
                     rows.append((sample_ts, self.start_channel + ch, value))
 
-            # Process Digital Input channels
-            if self.enable_di and di_bytes:
-                for port_idx, port_val in enumerate(di_bytes):
-                    for bit_idx in range(8):
-                        di_ch_index = self.di_channel_offset + (port_idx * 8) + bit_idx
-                        bit_val = float((port_val >> bit_idx) & 1)
-                        rows.append((sample_ts, di_ch_index, bit_val))
+        # InstantDiCtrl gives one snapshot per poll, not one value for every
+        # AI sample in the batch.  Persist that snapshot once at the batch
+        # timestamp; expanding it across the AI block manufactures stale DI
+        # samples and massively inflates storage.
+        if self.enable_di and di_bytes:
+            for port_idx, port_val in enumerate(di_bytes):
+                for bit_idx in range(8):
+                    logical_bit = (port_idx * 8) + bit_idx
+                    if self.di_channels is not None and logical_bit not in self.di_channels:
+                        continue
+                    if not self.rate_limiter.should_emit(f'DI{logical_bit}', batch_sample_ts_ns):
+                        continue
+                    di_ch_index = self.di_channel_offset + logical_bit
+                    bit_val = float((port_val >> bit_idx) & 1)
+                    rows.append((batch_sample_ts, di_ch_index, bit_val))
                 
         # Advance cumulative sample count for the next batch
         self.samples_since_anchor += samples_per_channel
@@ -647,6 +726,9 @@ def db_writer_thread():
     Supports TimescaleDB, InfluxDB, and MQTT publishing based on config.DESTINATION.
     Non-daemon thread — will flush remaining queue items before process exits.
     """
+    di_channels = getattr(config, 'DI_CHANNELS', None)
+    enable_di = any(di_channels) if di_channels is not None else getattr(config, 'ENABLE_DI', True)
+
     calibrator = Calibrator(
         start_channel=config.START_CHANNEL,
         channel_count=config.CHANNEL_COUNT,
@@ -659,7 +741,9 @@ def db_writer_thread():
         clock_rate=config.CLOCK_RATE,
         calibrator=calibrator,
         di_channel_offset=getattr(config, 'DI_CHANNEL_OFFSET', 100),
-        enable_di=getattr(config, 'ENABLE_DI', True),
+        enable_di=enable_di,
+        di_channels=di_channels,
+        channel_sample_rates=getattr(config, 'CHANNEL_SAMPLE_RATES', {}),
         recalibrate_interval_hr=getattr(config, 'ANCHOR_RECALIBRATE_INTERVAL_HR', 24.0)
     )
 
@@ -730,7 +814,7 @@ def db_writer_thread():
 
             # Re-enqueue so data is not lost (best-effort)
             try:
-                data_queue.put_nowait((batch_wall_ts_ns, raw_data, returned_count))
+                data_queue.put_nowait(item)
             except queue.Full:
                 with stats_lock:
                     stats["dropped"] += 1
@@ -829,4 +913,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

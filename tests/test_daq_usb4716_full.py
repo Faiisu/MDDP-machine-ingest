@@ -1,5 +1,6 @@
 # tests/test_daq_usb4716_full.py
 import unittest
+from unittest.mock import patch
 import json
 import os
 import sys
@@ -36,7 +37,7 @@ class TestConfigJSON(unittest.TestCase):
             "AUTO_START_ON_STARTUP", "AUTO_START_MODE", "DEVICE_DESCRIPTION",
             "PROFILE_PATH", "START_CHANNEL", "CHANNEL_COUNT", "CLOCK_RATE",
             "SECTION_LENGTH", "SECTION_COUNT", "QUEUE_MAXSIZE", "ENABLE_AI",
-            "ENABLE_DI", "DI_START_PORT", "DI_PORT_COUNT", "DI_CHANNEL_OFFSET",
+            "ENABLE_DI", "DI_CHANNELS", "CHANNEL_SAMPLE_RATES", "DI_START_PORT", "DI_PORT_COUNT", "DI_CHANNEL_OFFSET",
             "DESTINATION", "DB_HOST", "DB_PORT", "DB_NAME", "DB_TABLE",
             "SCALE_CONFIGS"
         ]
@@ -106,11 +107,63 @@ class TestDaqSampleParser(unittest.TestCase):
 
         rows = parser.parse_batch(batch_wall_ts_ns, None, returned_count, di_bytes=di_bytes)
 
-        # 1 port = 8 bit channels * 500 samples_per_channel = 4000 rows
-        self.assertEqual(len(rows), 4000)
+        # Instant DI is one byte snapshot per poll: 8 bits, not one repeated
+        # row for every synthetic sampling tick.
+        self.assertEqual(len(rows), 8)
         channels = set(r[1] for r in rows)
         expected_channels = set(range(100, 108))
         self.assertEqual(channels, expected_channels)
+        self.assertEqual(len({r[0] for r in rows}), 1)
+
+    def test_parse_selected_di_channels(self):
+        calibrator = Calibrator(0, 0, {})
+        parser = DaqSampleParser(
+            start_channel=0,
+            channel_count=0,
+            clock_rate=1000,
+            calibrator=calibrator,
+            di_channel_offset=100,
+            enable_di=True,
+            di_channels=[True, False, True, False, False, False, False, True]
+        )
+
+        rows = parser.parse_batch(1700000000000000000, None, 0, di_bytes=bytes([0b00000101]))
+
+        self.assertEqual({r[1] for r in rows}, {100, 102, 107})
+        self.assertEqual({r[2] for r in rows}, {1.0, 0.0})
+        self.assertEqual(len(rows), 3)
+
+    def test_parse_per_channel_save_rate(self):
+        calibrator = Calibrator(0, 1, {})
+        parser = DaqSampleParser(
+            start_channel=0,
+            channel_count=1,
+            clock_rate=10,
+            calibrator=calibrator,
+            enable_di=False,
+            channel_sample_rates={"AI0": 2}
+        )
+
+        rows = parser.parse_batch(
+            1700000000000000000,
+            np.arange(10, dtype=np.float64),
+            10,
+            di_bytes=None
+        )
+
+        # Hardware receives 10 samples/sec; only 2 output rows/sec are stored.
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({row[1] for row in rows}, {0})
+
+    def test_rate_limiter_handles_large_timestamp_jump(self):
+        from services.daq_usb4716.rate_control import ChannelRateLimiter
+
+        limiter = ChannelRateLimiter({"AI0": 2})
+        day_ns = 24 * 60 * 60 * 1_000_000_000
+
+        self.assertTrue(limiter.should_emit("AI0", 0))
+        self.assertTrue(limiter.should_emit("AI0", day_ns))
+        self.assertFalse(limiter.should_emit("AI0", day_ns + 100_000_000))
 
     def test_parse_dual_ai_and_di(self):
         batch_wall_ts_ns = 1700000000000000000
@@ -120,8 +173,42 @@ class TestDaqSampleParser(unittest.TestCase):
 
         rows = self.parser.parse_batch(batch_wall_ts_ns, ai_data, returned_count, di_bytes=di_bytes)
 
-        # AI rows = 200, DI rows = 50 samples * 8 bits = 400. Total = 600
-        self.assertEqual(len(rows), 600)
+        # AI rows = 200, plus one 8-bit DI snapshot.
+        self.assertEqual(len(rows), 208)
+
+    def test_parse_multiple_di_ports_once_per_batch(self):
+        calibrator = Calibrator(0, 0, {})
+        parser = DaqSampleParser(
+            start_channel=0,
+            channel_count=0,
+            clock_rate=1000,
+            calibrator=calibrator,
+            di_channel_offset=200,
+            enable_di=True
+        )
+
+        rows = parser.parse_batch(1700000000000000000, None, 0, di_bytes=bytes([0x01, 0x80]))
+
+        self.assertEqual(len(rows), 16)
+        self.assertEqual({r[1] for r in rows}, set(range(200, 216)))
+        self.assertEqual(len({r[0] for r in rows}), 1)
+
+    def test_di_reader_clips_stale_port_count(self):
+        from services.daq_usb4716 import stream_to_db
+
+        class FakeDiCtrl:
+            portCount = 1
+
+            def readAny(self, start_port, port_count):
+                self.request = (start_port, port_count)
+                return 0, [0xA5]
+
+        controller = FakeDiCtrl()
+        with patch.object(stream_to_db, 'BioFailed', lambda ret: ret != 0):
+            data = stream_to_db.read_di_snapshot(controller, 0, 5)
+
+        self.assertEqual(controller.request, (0, 1))
+        self.assertEqual(data, [0xA5])
 
     def test_legacy_3tuple_payload(self):
         batch_wall_ts_ns = 1700000000000000000
@@ -194,6 +281,8 @@ class TestFlaskAPI(unittest.TestCase):
         self.assertIn('CLOCK_RATE', data)
         self.assertIn('ENABLE_AI', data)
         self.assertIn('ENABLE_DI', data)
+        self.assertIn('DI_CHANNELS', data)
+        self.assertIn('CHANNEL_SAMPLE_RATES', data)
 
     def test_get_status_api(self):
         response = self.app.get('/api/status')
@@ -208,6 +297,58 @@ class TestFlaskAPI(unittest.TestCase):
         data = json.loads(response.data)
         self.assertEqual(data.get('status'), 'success')
         self.assertIn('devices', data)
+
+    def test_post_config_normalizes_di_end_port(self):
+        with open(os.path.join(PROJECT_ROOT, "services", "daq_usb4716", "config.json"), "r", encoding="utf-8") as f:
+            original = json.load(f)
+        payload = json.loads(json.dumps(original))
+        payload.update({
+            "DI_START_PORT": 0,
+            "DI_PORT_COUNT": 1,
+            "DI_END_PORT": 99,
+            "DI_CHANNELS": [True, False, False, False, False, False, False, False],
+            "ENABLE_DI": False,
+            "CHANNEL_SAMPLE_RATES": {"AI0": 100, "DI0": 1},
+        })
+
+        try:
+            response = self.app.post('/api/config', json=payload)
+
+            self.assertEqual(response.status_code, 200)
+            saved = read_config()
+            self.assertEqual(saved["DI_START_PORT"], 0)
+            self.assertEqual(saved["DI_PORT_COUNT"], 1)
+            self.assertEqual(saved["DI_END_PORT"], 0)
+            self.assertEqual(saved["DI_CHANNELS"], [True, False, False, False, False, False, False, False])
+            self.assertTrue(saved["ENABLE_DI"])
+            self.assertEqual(saved["CHANNEL_SAMPLE_RATES"], {"AI0": 100, "DI0": 1})
+        finally:
+            from services.daq_usb4716.app import write_config
+            write_config(original)
+
+    def test_post_config_rejects_extra_usb4716_di_ports(self):
+        payload = read_config()
+        payload.update({"DI_START_PORT": 0, "DI_PORT_COUNT": 2})
+
+        response = self.app.post('/api/config', json=payload)
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_post_config_rejects_invalid_di_channel_count(self):
+        payload = read_config()
+        payload["DI_CHANNELS"] = [True, False]
+
+        response = self.app.post('/api/config', json=payload)
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_post_config_rejects_channel_rate_above_source(self):
+        payload = read_config()
+        payload["CHANNEL_SAMPLE_RATES"] = {"AI0": payload["CLOCK_RATE"] + 1}
+
+        response = self.app.post('/api/config', json=payload)
+
+        self.assertEqual(response.status_code, 400)
 
 
 class TestInfluxDBClient(unittest.TestCase):
@@ -295,5 +436,3 @@ class TestInfluxDBClient(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
-

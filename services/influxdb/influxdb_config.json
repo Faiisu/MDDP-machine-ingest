@@ -5,7 +5,7 @@
   "INFLUX_MEASUREMENT": "sensor_1",
   "INFLUX_USERNAME": "admin",
   "INFLUX_PASSWORD": "advantech1",
-  "INFLUX_TOKEN": "thesecret1",
+  "INFLUX_TOKEN": "qHtoR4Uu3qYPO2Tsgt3UBZEyG9TzRfvWvORLCiE-thzrh8aadFiDIviAuAxqoHGwO0X3LbgQrbKfM_LDqCZ02g==",
   "RETENTION_ENABLED": true,
   "RETENTION_DAYS": 7,
   "RETENTION_HOURS": 12,

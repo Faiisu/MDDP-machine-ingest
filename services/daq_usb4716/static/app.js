@@ -55,8 +55,23 @@ document.addEventListener('DOMContentLoaded', () => {
         tlsEl.addEventListener('change', toggleTlsFields);
     }
     document.getElementById('ENABLE_AI')?.addEventListener('change', () => { toggleSamplingFields(); updateDataSizeEstimator(); checkDirtyState(); });
-    document.getElementById('ENABLE_DI')?.addEventListener('change', () => { toggleSamplingFields(); updateDataSizeEstimator(); checkDirtyState(); });
-    document.getElementById('CLOCK_RATE')?.addEventListener('input', () => { updateDataSizeEstimator(); checkDirtyState(); });
+    document.getElementById('DI_CHANNEL_OFFSET')?.addEventListener('input', () => {
+        const currentConfig = { ...(activeServerConfig || {}), DI_CHANNELS: collectDiChannelSelection() };
+        renderIngestionMatrixTable(currentConfig);
+        checkDirtyState();
+    });
+    const refreshRateMatrix = () => {
+        const currentConfig = {
+            ...(activeServerConfig || {}),
+            DI_CHANNELS: collectDiChannelSelection(),
+            CHANNEL_SAMPLE_RATES: collectChannelSampleRates()
+        };
+        renderIngestionMatrixTable(currentConfig);
+        updateDataSizeEstimator();
+        checkDirtyState();
+    };
+    document.getElementById('CLOCK_RATE')?.addEventListener('input', refreshRateMatrix);
+    document.getElementById('SECTION_LENGTH')?.addEventListener('input', refreshRateMatrix);
 
     // Track input & change events for real-time unsaved changes detection
     const configForm = document.getElementById('config-form');
@@ -78,6 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             closeConfirmAuditModal();
+            closeScannedDevicesMenu();
         }
     });
 
@@ -91,8 +107,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const menu = document.getElementById('scanned-devices-menu');
         const scanBtn = document.getElementById('btn-scan-usb');
         if (menu && !menu.classList.contains('hidden')) {
-            if (!menu.contains(e.target) && !scanBtn.contains(e.target)) {
-                menu.classList.add('hidden');
+            if (!menu.contains(e.target) && !scanBtn?.contains(e.target)) {
+                closeScannedDevicesMenu();
             }
         }
     });
@@ -111,7 +127,10 @@ async function handleScanUsbDevices() {
     if (!scanBtn || !menu) return;
 
     scanBtn.classList.add('scanning');
-    menu.innerHTML = '<div class="scan-loading"><span class="spinner"></span> Scanning Host PC USB Bus & DAQ Ports...</div>';
+    scanBtn.disabled = true;
+    scanBtn.setAttribute('aria-expanded', 'true');
+    menu.setAttribute('aria-busy', 'true');
+    menu.innerHTML = '<div class="scan-loading" role="status"><span class="spinner" aria-hidden="true"></span><span>Scanning host USB bus and DAQ ports...</span></div>';
     menu.classList.remove('hidden');
 
     try {
@@ -123,51 +142,90 @@ async function handleScanUsbDevices() {
             
             const header = document.createElement('div');
             header.className = 'scan-menu-header';
-            header.innerHTML = `<span>DETECTED HARDWARE PORTS (${data.devices.length})</span><button type="button" class="close-scan-btn">&times;</button>`;
+            const headerTitle = document.createElement('span');
+            headerTitle.className = 'scan-menu-title';
+            headerTitle.textContent = 'Detected devices';
+            const headerCount = document.createElement('span');
+            headerCount.className = 'scan-menu-count';
+            headerCount.textContent = `${data.devices.length} FOUND`;
+            const closeButton = document.createElement('button');
+            closeButton.type = 'button';
+            closeButton.className = 'close-scan-btn';
+            closeButton.setAttribute('aria-label', 'Close detected device list');
+            closeButton.innerHTML = '&times;';
+            header.append(headerTitle, headerCount, closeButton);
             menu.appendChild(header);
 
             data.devices.forEach(dev => {
-                const item = document.createElement('div');
+                const item = document.createElement('button');
+                item.type = 'button';
                 item.className = 'scan-item';
-                const badgeClass = dev.is_daq ? 'badge-daq' : 'badge-serial';
-                
-                item.innerHTML = `
-                    <div class="scan-item-main">
-                        <span class="scan-item-name">${dev.name}</span>
-                        <span class="scan-item-id monospace">${dev.id}</span>
-                    </div>
-                    <div class="scan-item-meta">
-                        <span class="badge ${badgeClass}">${dev.type}</span>
-                        <span class="scan-item-port text-muted">${dev.port}</span>
-                    </div>
-                `;
+                item.setAttribute('role', 'option');
+                item.setAttribute('aria-label', `${dev.name || 'Unknown device'}, ${dev.id || 'Unknown ID'}, ${dev.port || 'Unknown port'}`);
+
+                const statusDot = document.createElement('span');
+                statusDot.className = `scan-device-dot${dev.is_daq ? ' is-daq' : ''}`;
+                statusDot.setAttribute('aria-hidden', 'true');
+
+                const main = document.createElement('span');
+                main.className = 'scan-item-main';
+                const name = document.createElement('span');
+                name.className = 'scan-item-name';
+                name.textContent = dev.name || 'Unknown device';
+                const id = document.createElement('span');
+                id.className = 'scan-item-id monospace';
+                id.textContent = dev.id || 'Unknown device ID';
+                main.append(name, id);
+
+                const meta = document.createElement('span');
+                meta.className = 'scan-item-meta';
+                const type = document.createElement('span');
+                type.className = `scan-device-type ${dev.is_daq ? 'is-daq' : 'is-serial'}`;
+                type.textContent = dev.type || 'Device';
+                const port = document.createElement('span');
+                port.className = 'scan-item-port text-muted';
+                port.textContent = dev.port || '—';
+                meta.append(type, port);
+
+                item.append(statusDot, main, meta);
 
                 item.addEventListener('click', () => {
                     const devInput = document.getElementById('DEVICE_DESCRIPTION');
                     if (devInput) {
                         devInput.value = dev.id;
+                        devInput.dispatchEvent(new Event('input', { bubbles: true }));
                         devInput.classList.add('highlight-flash');
                         setTimeout(() => devInput.classList.remove('highlight-flash'), 1200);
                     }
-                    menu.classList.add('hidden');
+                    closeScannedDevicesMenu();
                     showToast(`Selected device: ${dev.id}`);
                 });
 
                 menu.appendChild(item);
             });
 
-            header.querySelector('.close-scan-btn').addEventListener('click', () => {
-                menu.classList.add('hidden');
-            });
+            closeButton.addEventListener('click', closeScannedDevicesMenu);
         } else {
-            menu.innerHTML = '<div class="scan-empty">No USB/DAQ devices detected on host PC.</div>';
+            menu.innerHTML = '<div class="scan-empty"><span class="scan-state-mark" aria-hidden="true">—</span><span>No USB or DAQ devices detected on this host.</span></div>';
         }
     } catch (err) {
         console.error('Error scanning USB devices:', err);
-        menu.innerHTML = `<div class="scan-error">Failed to scan USB ports: ${err.message}</div>`;
+        const errorMessage = document.createElement('div');
+        errorMessage.className = 'scan-error';
+        errorMessage.innerHTML = '<span class="scan-state-mark" aria-hidden="true">!</span><span>Failed to scan USB ports. Check the service log for details.</span>';
+        menu.replaceChildren(errorMessage);
     } finally {
         scanBtn.classList.remove('scanning');
+        scanBtn.disabled = false;
+        menu.setAttribute('aria-busy', 'false');
     }
+}
+
+function closeScannedDevicesMenu() {
+    const menu = document.getElementById('scanned-devices-menu');
+    const scanBtn = document.getElementById('btn-scan-usb');
+    if (menu) menu.classList.add('hidden');
+    if (scanBtn) scanBtn.setAttribute('aria-expanded', 'false');
 }
 
 // Phosphor Signal Trace Oscilloscope Animation
@@ -261,23 +319,75 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// Toggle sampling fields according to ENABLE_AI and ENABLE_DI checkboxes
+function getBooleanControlValue(id, fallback = false) {
+    const el = document.getElementById(id);
+    if (!el) return fallback;
+    if (el.type === 'checkbox') return el.checked;
+    return !['false', '0', 'off', 'no', ''].includes(String(el.value).trim().toLowerCase());
+}
+
+function parseBooleanValue(value, fallback = false) {
+    if (value === undefined || value === null) return fallback;
+    if (typeof value === 'string') {
+        return !['false', '0', 'off', 'no', ''].includes(value.trim().toLowerCase());
+    }
+    return Boolean(value);
+}
+
+function normalizeDiChannels(value, fallbackEnabled = false) {
+    if (Array.isArray(value) && value.length === 8) {
+        return value.map(channel => parseBooleanValue(channel));
+    }
+    if (value && typeof value === 'object') {
+        return Array.from({ length: 8 }, (_, bit) => parseBooleanValue(value[String(bit)]));
+    }
+    return Array(8).fill(parseBooleanValue(fallbackEnabled));
+}
+
+function normalizeChannelSampleRates(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    const rates = {};
+    Object.entries(value).forEach(([key, rawRate]) => {
+        const rate = parseFloat(rawRate);
+        if (Number.isFinite(rate) && rate > 0) rates[String(key).toUpperCase()] = rate;
+    });
+    return rates;
+}
+
+function getHardwareClockRate(config = {}) {
+    const rawRate = document.getElementById('CLOCK_RATE')?.value ?? config.CLOCK_RATE;
+    const rate = parseFloat(rawRate);
+    return Number.isFinite(rate) && rate > 0 ? rate : 1000;
+}
+
+function getChannelSourceRate(channelKey, hardwareRate, sectionLength) {
+    return String(channelKey).toUpperCase().startsWith('DI')
+        ? hardwareRate / Math.max(1, sectionLength)
+        : hardwareRate;
+}
+
+function getConfiguredChannelRate(rates, channelKey, sourceRate) {
+    const configuredRate = parseFloat(rates?.[String(channelKey).toUpperCase()]);
+    if (!Number.isFinite(configuredRate) || configuredRate <= 0) return sourceRate;
+    return Math.min(configuredRate, sourceRate);
+}
+
+function formatRate(rate) {
+    return Number.isInteger(rate) ? String(rate) : rate.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+// Toggle sampling fields according to ENABLE_AI. DI selection is controlled
+// independently by the eight row toggles in the ingestion matrix.
 function toggleSamplingFields() {
-    const aiEl = document.getElementById('ENABLE_AI');
-    const diEl = document.getElementById('ENABLE_DI');
-    const aiChecked = aiEl ? aiEl.checked : true;
-    const diChecked = diEl ? diEl.checked : true;
+    const aiChecked = getBooleanControlValue('ENABLE_AI', true);
 
     const aiFields = document.getElementById('ai-sampling-fields');
-    const diFields = document.getElementById('di-sampling-fields');
 
     if (aiFields) {
         aiFields.style.opacity = aiChecked ? '1' : '0.4';
-        aiFields.querySelectorAll('input').forEach(i => i.disabled = !aiChecked);
-    }
-    if (diFields) {
-        diFields.style.opacity = diChecked ? '1' : '0.4';
-        diFields.querySelectorAll('input').forEach(i => i.disabled = !diChecked);
+        aiFields.querySelectorAll('input').forEach(i => {
+            if (i.id !== 'ENABLE_AI') i.disabled = !aiChecked;
+        });
     }
 }
 
@@ -320,6 +430,23 @@ async function loadConfig() {
             }
         });
         
+        // DI_CHANNELS is the user-facing source of truth. Keep the DAQNavi
+        // port fields fixed internally for the USB-4716's one byte port.
+        config.DI_CHANNELS = normalizeDiChannels(config.DI_CHANNELS, config.ENABLE_DI === true);
+        config.ENABLE_DI = config.DI_CHANNELS.some(Boolean);
+        config.CHANNEL_SAMPLE_RATES = normalizeChannelSampleRates(config.CHANNEL_SAMPLE_RATES);
+        config.DI_START_PORT = 0;
+        config.DI_PORT_COUNT = 1;
+        config.DI_END_PORT = 0;
+        const enableDiInput = document.getElementById('ENABLE_DI');
+        if (enableDiInput) enableDiInput.value = String(config.ENABLE_DI);
+        const startPortInput = document.getElementById('DI_START_PORT');
+        if (startPortInput) startPortInput.value = '0';
+        const endPortInput = document.getElementById('DI_END_PORT');
+        if (endPortInput) endPortInput.value = '0';
+        const portCountInput = document.getElementById('DI_PORT_COUNT');
+        if (portCountInput) portCountInput.value = '1';
+
         // Store active server baseline configuration
         activeServerConfig = JSON.parse(JSON.stringify(config));
 
@@ -357,7 +484,7 @@ function checkDirtyState() {
             newVal = (el.value === 'true' || el.checked === true);
         } else if (el.name === 'ANCHOR_RECALIBRATE_INTERVAL_HR') {
             newVal = parseFloat(el.value);
-        } else if (['START_CHANNEL', 'CHANNEL_COUNT', 'CLOCK_RATE', 'SECTION_LENGTH', 'SECTION_COUNT', 'QUEUE_MAXSIZE', 'DB_PAGE_SIZE', 'STATS_INTERVAL_SEC', 'MQTT_PORT', 'MQTT_QOS', 'DI_START_PORT', 'DI_PORT_COUNT', 'DI_CHANNEL_OFFSET'].includes(el.name)) {
+        } else if (['START_CHANNEL', 'CHANNEL_COUNT', 'CLOCK_RATE', 'SECTION_LENGTH', 'SECTION_COUNT', 'QUEUE_MAXSIZE', 'DB_PAGE_SIZE', 'STATS_INTERVAL_SEC', 'MQTT_PORT', 'MQTT_QOS', 'DI_START_PORT', 'DI_END_PORT', 'DI_PORT_COUNT', 'DI_CHANNEL_OFFSET'].includes(el.name)) {
             newVal = parseInt(el.value, 10);
         } else {
             newVal = el.value;
@@ -388,6 +515,19 @@ function checkDirtyState() {
             }
             if (isDirty) break;
         }
+    }
+
+    if (!isDirty) {
+        const oldDiChannels = normalizeDiChannels(activeServerConfig.DI_CHANNELS, activeServerConfig.ENABLE_DI === true);
+        const newDiChannels = collectDiChannelSelection();
+        isDirty = oldDiChannels.some((selected, bit) => selected !== newDiChannels[bit]);
+    }
+
+    if (!isDirty) {
+        const oldRates = normalizeChannelSampleRates(activeServerConfig.CHANNEL_SAMPLE_RATES);
+        const newRates = collectChannelSampleRates();
+        const rateKeys = new Set([...Object.keys(oldRates), ...Object.keys(newRates)]);
+        isDirty = Array.from(rateKeys).some(key => oldRates[key] !== newRates[key]);
     }
 
     // Update save status badges according to dirty state
@@ -483,7 +623,7 @@ async function handleConfigSave(e) {
         } else if (el.name === 'ANCHOR_RECALIBRATE_INTERVAL_HR') {
             const val = parseFloat(el.value);
             configData[el.name] = isNaN(val) ? 24.0 : val;
-        } else if (['START_CHANNEL', 'CHANNEL_COUNT', 'CLOCK_RATE', 'SECTION_LENGTH', 'SECTION_COUNT', 'QUEUE_MAXSIZE', 'DB_PAGE_SIZE', 'STATS_INTERVAL_SEC', 'MQTT_PORT', 'MQTT_QOS', 'DI_START_PORT', 'DI_PORT_COUNT', 'DI_CHANNEL_OFFSET'].includes(el.name)) {
+        } else if (['START_CHANNEL', 'CHANNEL_COUNT', 'CLOCK_RATE', 'SECTION_LENGTH', 'SECTION_COUNT', 'QUEUE_MAXSIZE', 'DB_PAGE_SIZE', 'STATS_INTERVAL_SEC', 'MQTT_PORT', 'MQTT_QOS', 'DI_START_PORT', 'DI_END_PORT', 'DI_PORT_COUNT', 'DI_CHANNEL_OFFSET'].includes(el.name)) {
             const val = parseInt(el.value, 10);
             configData[el.name] = isNaN(val) ? (activeServerConfig[el.name] ?? 0) : val;
         } else {
@@ -493,6 +633,9 @@ async function handleConfigSave(e) {
 
     // Inject scaling configs dictionary
     configData['SCALE_CONFIGS'] = matrixScales;
+    configData['DI_CHANNELS'] = collectDiChannelSelection();
+    configData['ENABLE_DI'] = configData.DI_CHANNELS.some(Boolean);
+    configData['CHANNEL_SAMPLE_RATES'] = collectChannelSampleRates();
 
     // Present Audit & Confirmation Modal
     openConfirmAuditModal(configData);
@@ -509,6 +652,9 @@ function openConfirmAuditModal(newConfig) {
     let diffCount = 0;
 
     Object.keys(newConfig).forEach(key => {
+        // ENABLE_DI is retained only as a derived compatibility flag.
+        if (key === 'ENABLE_DI') return;
+
         if (key === 'SCALE_CONFIGS') {
             const oldScales = activeServerConfig.SCALE_CONFIGS || {};
             const newScales = newConfig.SCALE_CONFIGS || {};
@@ -534,6 +680,51 @@ function openConfirmAuditModal(newConfig) {
                         diffContainer.appendChild(item);
                     }
                 });
+            });
+            return;
+        }
+
+        if (key === 'DI_CHANNELS') {
+            const oldDiChannels = normalizeDiChannels(activeServerConfig.DI_CHANNELS, activeServerConfig.ENABLE_DI === true);
+            const newDiChannels = normalizeDiChannels(newConfig.DI_CHANNELS, newConfig.ENABLE_DI === true);
+            newDiChannels.forEach((selected, bit) => {
+                if (oldDiChannels[bit] === selected) return;
+                diffCount++;
+                const item = document.createElement('div');
+                item.className = 'diff-item';
+                item.innerHTML = `
+                    <span class="diff-key">DI${bit} Stream</span>
+                    <div class="diff-vals">
+                        <span class="diff-old">${oldDiChannels[bit] ? 'ON' : 'OFF'}</span>
+                        <span class="diff-arrow">&rarr;</span>
+                        <span class="diff-new">${selected ? 'ON' : 'OFF'}</span>
+                    </div>
+                `;
+                diffContainer.appendChild(item);
+            });
+            return;
+        }
+
+        if (key === 'CHANNEL_SAMPLE_RATES') {
+            const oldRates = normalizeChannelSampleRates(activeServerConfig.CHANNEL_SAMPLE_RATES);
+            const newRates = normalizeChannelSampleRates(newConfig.CHANNEL_SAMPLE_RATES);
+            const rateKeys = new Set([...Object.keys(oldRates), ...Object.keys(newRates)]);
+            rateKeys.forEach(rateKey => {
+                const oldRate = oldRates[rateKey];
+                const newRate = newRates[rateKey];
+                if (oldRate === newRate) return;
+                diffCount++;
+                const item = document.createElement('div');
+                item.className = 'diff-item';
+                item.innerHTML = `
+                    <span class="diff-key">${rateKey} Save Rate</span>
+                    <div class="diff-vals">
+                        <span class="diff-old">${oldRate === undefined ? 'INHERIT' : `${formatRate(oldRate)} Hz`}</span>
+                        <span class="diff-arrow">&rarr;</span>
+                        <span class="diff-new">${newRate === undefined ? 'INHERIT' : `${formatRate(newRate)} Hz`}</span>
+                    </div>
+                `;
+                diffContainer.appendChild(item);
             });
             return;
         }
@@ -572,6 +763,7 @@ function openConfirmAuditModal(newConfig) {
     const minRateText = document.getElementById('calc-size-min')?.textContent || '--';
     const metaRate = document.getElementById('modal-meta-rate');
     if (metaRate) metaRate.textContent = minRateText;
+    updateModalChannelMeta(newConfig);
 
     document.getElementById('confirm-modal-overlay')?.classList.remove('hidden');
 }
@@ -730,22 +922,32 @@ function bindSocketEvents() {
     });
 }
 
-// Render Channel & Port Ingestion Matrix Table
+// Render Channel Ingestion Matrix Table
 function renderIngestionMatrixTable(config) {
     const tbody = document.getElementById('ingestion-matrix-tbody');
     if (!tbody) return;
     tbody.innerHTML = '';
 
     scaleConfigs = config.SCALE_CONFIGS || {};
-    const channelCount = config.CHANNEL_COUNT || 1;
-    const enableAi = config.ENABLE_AI !== false;
-    const enableDi = config.ENABLE_DI !== false;
+    const channelCountValue = Number(config.CHANNEL_COUNT);
+    const channelCount = Number.isFinite(channelCountValue) ? Math.max(0, channelCountValue) : 0;
+    const enableAi = getBooleanControlValue('ENABLE_AI', config.ENABLE_AI !== false);
+    const hardwareRate = getHardwareClockRate(config);
+    const sectionLength = Math.max(1, parseInt(document.getElementById('SECTION_LENGTH')?.value ?? config.SECTION_LENGTH, 10) || 500);
+    const channelRates = normalizeChannelSampleRates(config.CHANNEL_SAMPLE_RATES);
+    let activeAiCount = 0;
 
     // 1. Render Analog Input (AI) Rows (0 to 7)
     for (let i = 0; i < 8; i++) {
         const scaleCfg = scaleConfigs[String(i)] || { stream: false, enabled: false, low_voltage: 0.0, high_voltage: 10.0, low_value: 0.0, high_value: 100.0 };
+        const rateKey = `AI${i}`;
+        const sourceRate = getChannelSourceRate(rateKey, hardwareRate, sectionLength);
+        const configuredRate = channelRates[rateKey] === undefined
+            ? null
+            : Math.min(channelRates[rateKey], sourceRate);
         // Per-channel stream state: use scaleCfg.stream if present, else fall back to range check
         const isIngestActive = enableAi && (scaleCfg.stream !== undefined ? scaleCfg.stream : (i < channelCount));
+        if (isIngestActive) activeAiCount++;
         
         const tr = document.createElement('tr');
         tr.className = `row-ai ${isIngestActive ? '' : 'row-disabled'}`;
@@ -765,6 +967,9 @@ function renderIngestionMatrixTable(config) {
                     <span class="toggle-slider"></span>
                 </label>
             </td>
+            <td>
+                <input type="number" class="table-input channel-rate-input" data-rate-key="${rateKey}" min="0.001" max="${sourceRate}" step="any" value="${configuredRate ?? ''}" placeholder="HW ${formatRate(sourceRate)}" title="Blank inherits ${formatRate(sourceRate)} Hz">
+            </td>
             <td style="text-align: center;">
                 <label class="toggle-switch switch-cyan">
                     <input type="checkbox" class="scale-toggle-ai" data-ch="${i}" ${scaleCfg.enabled ? 'checked' : ''}>
@@ -780,36 +985,58 @@ function renderIngestionMatrixTable(config) {
         tbody.appendChild(tr);
     }
 
-    // 2. Render Digital Input (DI) Rows (0 to 7)
-    for (let j = 0; j < 8; j++) {
-        const isDiActive = enableDi;
+    // 2. Render all eight Digital Input (DI) channel rows.
+    const diOffsetValue = parseInt(document.getElementById('DI_CHANNEL_OFFSET')?.value ?? config.DI_CHANNEL_OFFSET, 10);
+    const diOffset = Number.isFinite(diOffsetValue) ? Math.max(0, diOffsetValue) : 100;
+    const diChannels = normalizeDiChannels(config.DI_CHANNELS, config.ENABLE_DI === true);
 
+    let selectedDiCount = 0;
+    for (let bit = 0; bit < 8; bit++) {
+        const isSelected = diChannels[bit];
+        if (isSelected) selectedDiCount++;
+        const chId = diOffset + bit;
+        const rateKey = `DI${bit}`;
+        const sourceRate = getChannelSourceRate(rateKey, hardwareRate, sectionLength);
+        const configuredRate = channelRates[rateKey] === undefined
+            ? null
+            : Math.min(channelRates[rateKey], sourceRate);
         const tr = document.createElement('tr');
-        tr.className = `row-di ${isDiActive ? '' : 'row-disabled'}`;
-        tr.dataset.di = j;
-
+        tr.className = `row-di ${isSelected ? '' : 'row-disabled'}`;
+        tr.dataset.di = bit;
         tr.innerHTML = `
             <td>
                 <div class="ch-badge-cell">
-                    <span class="badge badge-di">DI ${j}</span>
-                    <span class="ch-id monospace">ch${100 + j}</span>
+                    <span class="badge badge-di">DI ${bit}</span>
+                    <span class="ch-id monospace">ch${chId}</span>
                 </div>
             </td>
             <td><span class="type-label text-cyan">Digital Bit</span></td>
             <td style="text-align: center;">
                 <label class="toggle-switch switch-cyan">
-                    <input type="checkbox" class="ingest-toggle-di" data-di="${j}" ${isDiActive ? 'checked' : ''}>
+                    <input type="checkbox" class="ingest-toggle-di" data-di="${bit}" ${isSelected ? 'checked' : ''}>
                     <span class="toggle-slider"></span>
                 </label>
             </td>
+            <td>
+                <input type="number" class="table-input channel-rate-input" data-rate-key="${rateKey}" min="0.001" max="${sourceRate}" step="any" value="${configuredRate ?? ''}" placeholder="DI ${formatRate(sourceRate)}" title="Blank inherits ${formatRate(sourceRate)} Hz">
+            </td>
             <td style="text-align: center;"><span class="text-muted monospace" style="font-size: 0.65rem;">N/A</span></td>
-            <td><span class="text-muted monospace">-</span></td>
-            <td><span class="text-muted monospace">-</span></td>
-            <td><span class="text-muted monospace">-</span></td>
-            <td><span class="text-muted monospace">-</span></td>
+            <td><span class="text-muted monospace">—</span></td>
+            <td><span class="text-muted monospace">—</span></td>
+            <td><span class="text-muted monospace">—</span></td>
+            <td><span class="text-muted monospace">—</span></td>
         `;
-
         tbody.appendChild(tr);
+    }
+
+    // Update Matrix Meta Info Text
+    const metaInfo = document.getElementById('matrix-meta-info');
+    if (metaInfo) {
+        metaInfo.textContent = `${activeAiCount} AI Channels · ${selectedDiCount}/8 DI Channels selected`;
+    }
+    const selectionSummary = document.getElementById('di-selection-summary');
+    if (selectionSummary) {
+        selectionSummary.textContent = `${selectedDiCount}/8 DI Channels selected in the matrix`;
     }
 
     // 3. Bind Event Listeners for Row Scale Toggles & Ingestion Switches
@@ -859,7 +1086,7 @@ function bindMatrixTableEvents() {
     });
 
     // Input changes update scaleConfigs in memory
-    tbody.querySelectorAll('.table-input').forEach(input => {
+    tbody.querySelectorAll('.table-input:not(.channel-rate-input)').forEach(input => {
         const handleTableInput = (e) => {
             const ch = e.target.dataset.ch;
             const tr = e.target.closest('tr');
@@ -882,6 +1109,16 @@ function bindMatrixTableEvents() {
 
         input.addEventListener('input', handleTableInput);
         input.addEventListener('change', handleTableInput);
+    });
+
+    // Per-channel output-rate changes do not affect hardware acquisition.
+    tbody.querySelectorAll('.channel-rate-input').forEach(input => {
+        const handleRateInput = () => {
+            updateDataSizeEstimator();
+            checkDirtyState();
+        };
+        input.addEventListener('input', handleRateInput);
+        input.addEventListener('change', handleRateInput);
     });
 
     // Tab filter buttons
@@ -932,17 +1169,9 @@ function updateGlobalSamplingFromTable() {
         chCountEl.value = String(anyAiActive ? (maxAiCh + 1) : 0);
     }
 
-    const diSwitches = document.querySelectorAll('.ingest-toggle-di');
-    let anyDiActive = false;
-    diSwitches.forEach(sw => {
-        if (sw.checked) anyDiActive = true;
-    });
-
+    const diChannels = collectDiChannelSelection();
     const enableDiEl = document.getElementById('ENABLE_DI');
-    if (enableDiEl) {
-        enableDiEl.checked = anyDiActive;
-        enableDiEl.value = String(anyDiActive);
-    }
+    if (enableDiEl) enableDiEl.value = String(diChannels.some(Boolean));
 
     updateDataSizeEstimator();
 }
@@ -951,30 +1180,42 @@ function updateGlobalSamplingFromTable() {
 function updateDataSizeEstimator() {
     const clockRateEl = document.getElementById('CLOCK_RATE');
     const clockRate = clockRateEl ? (parseInt(clockRateEl.value, 10) || 1000) : 1000;
+    const sectionLength = Math.max(1, parseInt(document.getElementById('SECTION_LENGTH')?.value, 10) || 500);
+    const channelRates = collectChannelSampleRates();
 
     // Count active AI channels
-    let activeAiCount = 0;
+    let aiRowsPerSec = 0;
     const aiSwitches = document.querySelectorAll('.ingest-toggle-ai');
     if (aiSwitches.length > 0) {
-        aiSwitches.forEach(sw => { if (sw.checked) activeAiCount++; });
+        aiSwitches.forEach(sw => {
+            if (!sw.checked) return;
+            const key = `AI${sw.dataset.ch}`;
+            aiRowsPerSec += getConfiguredChannelRate(channelRates, key, clockRate);
+        });
     } else {
-        const enableAi = document.getElementById('ENABLE_AI')?.checked ?? true;
-        const chCount = parseInt(document.getElementById('CHANNEL_COUNT')?.value, 10) || 1;
-        activeAiCount = enableAi ? chCount : 0;
+        const enableAi = getBooleanControlValue('ENABLE_AI', true);
+        const chCount = Math.max(0, parseInt(document.getElementById('CHANNEL_COUNT')?.value, 10) || 0);
+        aiRowsPerSec = enableAi ? chCount * clockRate : 0;
     }
 
-    // Count active DI bits
-    let activeDiCount = 0;
+    // Count selected DI channels. Instant DI produces one snapshot per AI
+    // acquisition block, so each selected bit has the snapshot rate.
     const diSwitches = document.querySelectorAll('.ingest-toggle-di');
+    const diSnapshotRate = clockRate / sectionLength;
+    let diRowsPerSec = 0;
     if (diSwitches.length > 0) {
-        diSwitches.forEach(sw => { if (sw.checked) activeDiCount++; });
+        diSwitches.forEach(toggle => {
+            if (!toggle.checked) return;
+            const key = `DI${toggle.dataset.di}`;
+            diRowsPerSec += getConfiguredChannelRate(channelRates, key, diSnapshotRate);
+        });
     } else {
-        const enableDi = document.getElementById('ENABLE_DI')?.checked ?? true;
-        activeDiCount = enableDi ? 8 : 0;
+        const selectedDiCount = normalizeDiChannels(activeServerConfig?.DI_CHANNELS, activeServerConfig?.ENABLE_DI === true)
+            .filter(Boolean).length;
+        diRowsPerSec = selectedDiCount * diSnapshotRate;
     }
 
-    const totalChannels = activeAiCount + activeDiCount;
-    const sampleRowsPerSec = totalChannels * clockRate;
+    const sampleRowsPerSec = aiRowsPerSec + diRowsPerSec;
     const bytesPerSec = sampleRowsPerSec * 40; // ~40 bytes per sample row (ts + ch + val + DB overhead)
 
     const bytesMin = bytesPerSec * 60;
@@ -990,12 +1231,69 @@ function updateDataSizeEstimator() {
     if (monthEl) monthEl.textContent = formatBytes(bytesMonth) + ' / month';
 }
 
+function updateModalChannelMeta(config) {
+    const meta = document.getElementById('modal-meta-ch');
+    if (!meta) return;
+
+    const aiRows = document.querySelectorAll('.ingest-toggle-ai');
+    const activeAi = aiRows.length
+        ? Array.from(aiRows).filter(toggle => toggle.checked).length
+        : (getBooleanControlValue('ENABLE_AI', config.ENABLE_AI !== false)
+            ? Math.max(0, parseInt(config.CHANNEL_COUNT, 10) || 0) : 0);
+    const diSwitches = document.querySelectorAll('.ingest-toggle-di');
+    const activeDi = diSwitches.length
+        ? Array.from(diSwitches).filter(toggle => toggle.checked).length
+        : normalizeDiChannels(config.DI_CHANNELS, config.ENABLE_DI === true).filter(Boolean).length;
+    meta.textContent = `${activeAi} AI · ${activeDi} DI`;
+}
+
 function formatBytes(bytes) {
     if (!bytes || bytes === 0) return '0.00 B';
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function collectDiChannelSelection() {
+    const toggles = document.querySelectorAll('.ingest-toggle-di');
+    if (!toggles.length) {
+        return normalizeDiChannels(activeServerConfig?.DI_CHANNELS, activeServerConfig?.ENABLE_DI === true);
+    }
+
+    const selected = Array(8).fill(false);
+    toggles.forEach(toggle => {
+        const bit = parseInt(toggle.dataset.di, 10);
+        if (Number.isInteger(bit) && bit >= 0 && bit < 8) selected[bit] = toggle.checked;
+    });
+    return selected;
+}
+
+function collectChannelSampleRates() {
+    const existingRates = normalizeChannelSampleRates(activeServerConfig?.CHANNEL_SAMPLE_RATES);
+    const inputs = document.querySelectorAll('.channel-rate-input');
+    if (!inputs.length) return existingRates;
+
+    const rates = { ...existingRates };
+    const hardwareRate = getHardwareClockRate(activeServerConfig || {});
+    const sectionLength = Math.max(1, parseInt(document.getElementById('SECTION_LENGTH')?.value, 10) || 500);
+
+    inputs.forEach(input => {
+        const key = String(input.dataset.rateKey || '').toUpperCase();
+        if (!key) return;
+        const sourceRate = getChannelSourceRate(key, hardwareRate, sectionLength);
+        const rawValue = String(input.value ?? '').trim();
+        if (!rawValue) {
+            delete rates[key];
+            return;
+        }
+
+        const rate = parseFloat(rawValue);
+        if (!Number.isFinite(rate) || rate <= 0) return;
+        rates[key] = Math.min(rate, sourceRate);
+    });
+
+    return rates;
 }
 
 // Save inputs back to active channel configuration in memory from table

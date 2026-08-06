@@ -56,6 +56,11 @@ import psycopg2
 import psycopg2.extras
 import psycopg2.extensions
 
+try:
+    from services.daq_usb4716.rate_control import ChannelRateLimiter, normalize_channel_sample_rates
+except ImportError:
+    from rate_control import ChannelRateLimiter, normalize_channel_sample_rates
+
 import json
 from types import SimpleNamespace
 
@@ -233,9 +238,10 @@ def mock_daq_reader_thread():
     """
     try:
         enable_ai = getattr(config, 'ENABLE_AI', True)
-        enable_di = getattr(config, 'ENABLE_DI', True)
-        di_start_port = getattr(config, 'DI_START_PORT', 0)
-        di_port_count = getattr(config, 'DI_PORT_COUNT', 1)
+        di_channels = getattr(config, 'DI_CHANNELS', None)
+        enable_di = any(di_channels) if di_channels is not None else getattr(config, 'ENABLE_DI', True)
+        di_start_port = int(getattr(config, 'DI_START_PORT', 0))
+        di_port_count = int(getattr(config, 'DI_PORT_COUNT', 1))
 
         n_ch    = config.CHANNEL_COUNT if enable_ai else 0
         sec_len = config.SECTION_LENGTH      # samples per channel per batch
@@ -355,13 +361,22 @@ class DaqSampleParser:
     """
     Responsibility: Parse interleaved raw DAQ data (AI and DI) and compute timestamps relative to a periodic anchor.
     """
-    def __init__(self, start_channel, channel_count, clock_rate, calibrator, di_channel_offset=100, enable_di=True, recalibrate_interval_hr=24.0):
+    def __init__(self, start_channel, channel_count, clock_rate, calibrator, di_channel_offset=100, enable_di=True, di_channels=None, channel_sample_rates=None, recalibrate_interval_hr=24.0):
         self.start_channel = start_channel
         self.channel_count = channel_count
         self.dt_ns = int(1_000_000_000 / clock_rate)
         self.calibrator = calibrator
         self.di_channel_offset = di_channel_offset
         self.enable_di = enable_di
+        self.di_channels = None if di_channels is None else {
+            int(bit) for bit, selected in enumerate(di_channels) if selected
+        }
+        self.channel_sample_rates = normalize_channel_sample_rates(
+            channel_sample_rates or {},
+            hardware_rate=clock_rate,
+            section_length=getattr(config, 'SECTION_LENGTH', 500),
+        )
+        self.rate_limiter = ChannelRateLimiter(self.channel_sample_rates)
         
         # Periodic anchor state configuration
         self.recalibrate_interval_ns = int(recalibrate_interval_hr * 3600 * 1_000_000_000)
@@ -381,6 +396,8 @@ class DaqSampleParser:
             self.samples_since_anchor = 0
             
         rows = []
+        batch_sample_ts_ns = self.anchor_time_ns + self.samples_since_anchor * self.dt_ns
+        batch_sample_ts = datetime.fromtimestamp(batch_sample_ts_ns / 1_000_000_000, tz=timezone.utc)
         for s in range(samples_per_channel):
             # Calculate forward timestamp based on cumulative samples since the last anchor
             sample_ts_ns = self.anchor_time_ns + (self.samples_since_anchor + s) * self.dt_ns
@@ -389,18 +406,28 @@ class DaqSampleParser:
             # Process Analog Input channels
             if returned_count > 0 and self.channel_count > 0:
                 for ch in range(self.channel_count):
+                    channel_key = f'AI{self.start_channel + ch}'
+                    if not self.rate_limiter.should_emit(channel_key, sample_ts_ns):
+                        continue
                     value = raw_data[s * self.channel_count + ch]
                     value = self.calibrator.calibrate(ch, value)
                     value = round(value, 3)
                     rows.append((sample_ts, self.start_channel + ch, value))
 
-            # Process Digital Input channels
-            if self.enable_di and di_bytes:
-                for port_idx, port_val in enumerate(di_bytes):
-                    for bit_idx in range(8):
-                        di_ch_index = self.di_channel_offset + (port_idx * 8) + bit_idx
-                        bit_val = float((port_val >> bit_idx) & 1)
-                        rows.append((sample_ts, di_ch_index, bit_val))
+        # Instant DI is a single snapshot per poll.  Keep one row per bit at
+        # the batch timestamp instead of repeating the same state for every
+        # AI sample in the block.
+        if self.enable_di and di_bytes:
+            for port_idx, port_val in enumerate(di_bytes):
+                for bit_idx in range(8):
+                    logical_bit = (port_idx * 8) + bit_idx
+                    if self.di_channels is not None and logical_bit not in self.di_channels:
+                        continue
+                    if not self.rate_limiter.should_emit(f'DI{logical_bit}', batch_sample_ts_ns):
+                        continue
+                    di_ch_index = self.di_channel_offset + logical_bit
+                    bit_val = float((port_val >> bit_idx) & 1)
+                    rows.append((batch_sample_ts, di_ch_index, bit_val))
                 
         # Advance cumulative sample count for the next batch
         self.samples_since_anchor += samples_per_channel
@@ -684,6 +711,9 @@ def db_writer_thread():
 
     Non-daemon thread — flushes remaining queue items before process exits.
     """
+    di_channels = getattr(config, 'DI_CHANNELS', None)
+    enable_di = any(di_channels) if di_channels is not None else getattr(config, 'ENABLE_DI', True)
+
     calibrator = Calibrator(
         start_channel=config.START_CHANNEL,
         channel_count=config.CHANNEL_COUNT,
@@ -696,7 +726,9 @@ def db_writer_thread():
         clock_rate=config.CLOCK_RATE,
         calibrator=calibrator,
         di_channel_offset=getattr(config, 'DI_CHANNEL_OFFSET', 100),
-        enable_di=getattr(config, 'ENABLE_DI', True),
+        enable_di=enable_di,
+        di_channels=di_channels,
+        channel_sample_rates=getattr(config, 'CHANNEL_SAMPLE_RATES', {}),
         recalibrate_interval_hr=getattr(config, 'ANCHOR_RECALIBRATE_INTERVAL_HR', 24.0)
     )
 
@@ -795,7 +827,7 @@ def db_writer_thread():
 
                 # Re-enqueue so data is not lost (best-effort)
                 try:
-                    data_queue.put_nowait((batch_wall_ts_ns, raw_data, returned_count))
+                    data_queue.put_nowait(item)
                 except queue.Full:
                     with stats_lock:
                         stats["dropped"] += 1
@@ -923,4 +955,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

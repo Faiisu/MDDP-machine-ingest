@@ -23,6 +23,11 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+try:
+    from services.daq_usb4716.rate_control import normalize_channel_sample_rates
+except ImportError:
+    from rate_control import normalize_channel_sample_rates
+
 app = Flask(__name__, template_folder='templates', static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*")
 
@@ -32,6 +37,11 @@ PID_PATH = os.path.join(os.path.dirname(__file__), '.daq_process.pid')
 MODE_PATH = os.path.join(os.path.dirname(__file__), '.daq_process.mode')
 DESIRED_STATE_PATH = os.path.join(os.path.dirname(__file__), '.daq_desired_state.json')
 LOG_PATH = os.path.join(os.path.dirname(__file__), 'daq_pipeline.log')
+
+# DAQNavi exposes DIO input as byte-sized ports.  The USB-4716 has one
+# 8-bit digital-input port (DI0..DI7); the console must not turn the device's
+# five physical terminal connectors into five logical DI ports.
+MAX_DI_PORTS = 1
 
 # Global monitoring variables
 tail_thread = None
@@ -46,6 +56,76 @@ def read_config():
     except Exception as e:
         print(f"Error reading config.json: {e}")
         return {}
+
+
+def normalize_config(config_data):
+    """Validate and normalize values that affect hardware acquisition."""
+    if not isinstance(config_data, dict):
+        raise ValueError('Configuration payload must be a JSON object.')
+
+    normalized = dict(config_data)
+
+    def as_int(key, default):
+        value = normalized.get(key, default)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            raise ValueError(f"{key} must be an integer.")
+
+    di_start_port = as_int('DI_START_PORT', 0)
+    di_port_count = as_int('DI_PORT_COUNT', 1)
+    di_channel_offset = as_int('DI_CHANNEL_OFFSET', 100)
+    hardware_clock_rate = as_int('CLOCK_RATE', 1000)
+    if hardware_clock_rate < 1:
+        raise ValueError('CLOCK_RATE must be greater than zero.')
+
+    channel_sample_rates = normalize_channel_sample_rates(
+        normalized.get('CHANNEL_SAMPLE_RATES', {}),
+        hardware_rate=hardware_clock_rate,
+        section_length=normalized.get('SECTION_LENGTH', 500),
+    )
+
+    def as_bool(value, default=False):
+        if value is None:
+            return default
+        if isinstance(value, str):
+            return value.strip().lower() in {'1', 'true', 'yes', 'on'}
+        return bool(value)
+
+    raw_di_channels = normalized.get('DI_CHANNELS')
+    if raw_di_channels is None:
+        enable_di = as_bool(normalized.get('ENABLE_DI', False))
+        di_channels = [bool(enable_di)] * 8
+    elif isinstance(raw_di_channels, dict):
+        di_channels = [as_bool(raw_di_channels.get(str(bit), False)) for bit in range(8)]
+    elif isinstance(raw_di_channels, list) and len(raw_di_channels) == 8:
+        di_channels = [as_bool(value) for value in raw_di_channels]
+    else:
+        raise ValueError('DI_CHANNELS must contain exactly 8 channel selections.')
+
+    # ENABLE_DI is retained as a backwards-compatible internal flag.  The
+    # selected channels are the source of truth for the new frontend.
+    enable_di = any(di_channels)
+
+    if di_start_port < 0 or di_start_port >= MAX_DI_PORTS:
+        raise ValueError(f'DI_START_PORT must be between 0 and {MAX_DI_PORTS - 1}.')
+    if di_port_count < 1 or di_start_port + di_port_count > MAX_DI_PORTS:
+        raise ValueError(
+            f'DI_PORT_COUNT must be between 1 and {MAX_DI_PORTS - di_start_port} '
+            f'for start port {di_start_port}.'
+        )
+    if di_channel_offset < 0:
+        raise ValueError('DI_CHANNEL_OFFSET must be zero or greater.')
+
+    normalized['DI_START_PORT'] = di_start_port
+    normalized['DI_PORT_COUNT'] = di_port_count
+    normalized['DI_END_PORT'] = di_start_port + di_port_count - 1
+    normalized['DI_CHANNEL_OFFSET'] = di_channel_offset
+    normalized['DI_CHANNELS'] = di_channels
+    normalized['CLOCK_RATE'] = hardware_clock_rate
+    normalized['CHANNEL_SAMPLE_RATES'] = channel_sample_rates
+    normalized['ENABLE_DI'] = enable_di
+    return normalized
 
 def write_config(config_data):
     """Writes configuration parameters to config.json."""
@@ -292,9 +372,14 @@ def get_config():
 
 @app.route('/api/config', methods=['POST'])
 def save_config():
-    config_data = request.json
+    config_data = request.get_json(silent=True)
+    try:
+        config_data = normalize_config(config_data)
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+
     if write_config(config_data):
-        return jsonify({'status': 'success'})
+        return jsonify({'status': 'success', 'config': config_data})
     return jsonify({'status': 'error', 'message': 'Failed to save configuration.'}), 500
 
 @app.route('/api/test_db', methods=['POST'])
