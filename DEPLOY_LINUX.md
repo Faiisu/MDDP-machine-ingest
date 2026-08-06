@@ -82,10 +82,10 @@ Launch the MDDP application suite in background mode:
 [SYSTEM] Starting Musashi II Control Panel on Port 8082 (all interfaces)...
 [SYSTEM] Starting Musashi IV Control Panel on Port 8083 (all interfaces)...
 [SYSTEM] Starting Database Plotter on Port 8084 (all interfaces)...
-[SYSTEM] Starting InfluxDB Manager on Port 8085 (all interfaces)...
+[SYSTEM] Starting InfluxDB Manager on Port 18085 (all interfaces)...
 [SYSTEM] Services launched in background.
 [SYSTEM] Portal:      http://localhost:8080
-[SYSTEM] InfluxDB manager at http://localhost:8085
+[SYSTEM] InfluxDB manager at http://localhost:18085
 ==========================================================
 ```
 
@@ -161,12 +161,12 @@ Once launched, access the web microservices via your browser:
 | **Musashi II Panel** | `8082` | [http://localhost:8082](http://localhost:8082) |
 | **Musashi IV Panel** | `8083` | [http://localhost:8083](http://localhost:8083) |
 | **Database Plotter** | `8084` | [http://localhost:8084](http://localhost:8084) |
-| **InfluxDB Manager** | `8085` | [http://localhost:8085](http://localhost:8085) |
+| **InfluxDB Manager** | `18085` | [http://localhost:18085](http://localhost:18085) |
 | **InfluxDB Server** | `8086` | Docker container health endpoint |
 
 Verify active listening ports:
 ```bash
-lsof -i :8080 -i :8081 -i :8082 -i :8083 -i :8084 -i :8085 -i :8086
+lsof -i :8080 -i :8081 -i :8082 -i :8083 -i :8084 -i :18085 -i :8086
 ```
 
 ---

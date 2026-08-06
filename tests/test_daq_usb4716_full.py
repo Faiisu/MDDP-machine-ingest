@@ -210,5 +210,90 @@ class TestFlaskAPI(unittest.TestCase):
         self.assertIn('devices', data)
 
 
+class TestInfluxDBClient(unittest.TestCase):
+    """Test InfluxDB Client functionality and HTTP Line Protocol payload generation"""
+
+    def setUp(self):
+        from services.daq_usb4716.stream_to_db import InfluxDBClient
+        self.client = InfluxDBClient(
+            url="http://localhost:8086",
+            token="test-token",
+            org="test-org",
+            bucket="test-bucket",
+            measurement="test_measurement"
+        )
+
+    def test_connect_health(self):
+        from unittest.mock import patch, MagicMock
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.__enter__.return_value = mock_resp
+
+        with patch('urllib.request.urlopen', return_value=mock_resp):
+            res = self.client.connect()
+            self.assertTrue(res)
+            self.assertTrue(self.client.is_connected)
+
+    def test_send_samples(self):
+        from unittest.mock import patch, MagicMock
+        from datetime import datetime, timezone
+
+        mock_resp = MagicMock()
+        mock_resp.status = 204
+        mock_resp.__enter__.return_value = mock_resp
+
+        sample_ts = datetime(2026, 8, 5, 12, 0, 0, tzinfo=timezone.utc)
+        rows = [
+            (sample_ts, 0, 1.234),
+            (sample_ts, 1, 5.678)
+        ]
+
+        with patch('urllib.request.urlopen', return_value=mock_resp) as mock_urlopen:
+            self.client.send_samples(rows)
+            self.assertTrue(mock_urlopen.called)
+            req = mock_urlopen.call_args[0][0]
+            self.assertIn('precision=ns', req.full_url)
+            self.assertEqual(req.headers.get('Authorization'), 'Token test-token')
+            body = req.data.decode('utf-8')
+            lines = body.split('\n')
+            self.assertEqual(len(lines), 2)
+            self.assertTrue(lines[0].startswith('test_measurement,ch=0 value=1.234'))
+            self.assertTrue(lines[1].startswith('test_measurement,ch=1 value=5.678'))
+
+    def test_rollback(self):
+        # Verify rollback is safe no-op
+        try:
+            self.client.rollback()
+        except Exception as e:
+            self.fail(f"rollback() raised unexpected exception: {e}")
+
+    def test_mockup_influx_client(self):
+        from services.daq_usb4716.mockup_stream_to_db import InfluxDBClient as MockupInfluxDBClient
+        from unittest.mock import patch, MagicMock
+        from datetime import datetime, timezone
+
+        mock_client = MockupInfluxDBClient(
+            url="http://localhost:8086",
+            token="token123",
+            org="org123",
+            bucket="bucket123"
+        )
+        mock_resp = MagicMock()
+        mock_resp.status = 204
+        mock_resp.__enter__.return_value = mock_resp
+
+        sample_ts = datetime(2026, 8, 5, 12, 0, 0, tzinfo=timezone.utc)
+        rows = [(sample_ts, 0, 9.876)]
+
+        with patch('urllib.request.urlopen', return_value=mock_resp) as mock_urlopen:
+            mock_client.send_samples(rows)
+            self.assertTrue(mock_urlopen.called)
+            req = mock_urlopen.call_args[0][0]
+            body = req.data.decode('utf-8')
+            self.assertTrue(body.startswith('daq_telemetry,ch=0 value=9.876'))
+
+
 if __name__ == '__main__':
     unittest.main()
+
+

@@ -58,7 +58,7 @@ if exist "%PLOTTER_PID_FILE%" del "%PLOTTER_PID_FILE%"
 rem 6. Stop InfluxDB Manager
 echo [SYSTEM] Stopping InfluxDB Manager...
 taskkill /fi "WINDOWTITLE eq MDDP_INFLUXDB_MANAGER*" /t /f >nul 2>&1
-for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr /r /c:":8085 .*LISTENING"') do (
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr /r /c:":18085 .*LISTENING"') do (
     taskkill /f /pid %%a >nul 2>&1
 )
 if exist "%INFLUXDB_MGR_PID_FILE%" del "%INFLUXDB_MGR_PID_FILE%"

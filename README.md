@@ -11,7 +11,7 @@ MDDP is a modular control and telemetry platform for Advantech USB-4716 data acq
 | Musashi II console | `8082` | `services/musashi_ii/app.py` | Configure and control serial dispenser ingestion. |
 | Musashi IV console | `8083` | `services/musashi_iv/app.py` | Configure and control HTTP dispenser ingestion. |
 | Database plotter | `8084` | `services/plotter/app.py` | Query PostgreSQL/TimescaleDB and draw Plotly charts. |
-| InfluxDB manager | `8085` | `services/influxdb/app.py` | Manage the InfluxDB container, credentials, retention, and logs. |
+| InfluxDB manager | `18085` | `services/influxdb/app.py` | Manage the InfluxDB container, credentials, retention, and logs. |
 | InfluxDB server | `8086` | Docker Compose | Stores InfluxDB time-series data. |
 
 Both platform launchers start the portal and the five Python services. Open the portal at `http://{host-ip}:8080`; its cards direct the browser to the same host on each service port.
@@ -33,7 +33,7 @@ flowchart TD
     Destination -->|InfluxDB| Influx[(InfluxDB :8086)]
     Destination -->|MQTT| Broker[(MQTT broker)]
     SQL --> Plot[Open plotter :8084]
-    Influx --> Manage[Manage retention :8085]
+    Influx --> Manage[Manage retention :18085]
     Plot --> Verify([Verify telemetry])
     Manage --> Verify
 
@@ -71,7 +71,7 @@ Open the portal, then select a service:
 - Musashi II: [http://localhost:8082](http://localhost:8082)
 - Musashi IV: [http://localhost:8083](http://localhost:8083)
 - Plotter: [http://localhost:8084](http://localhost:8084)
-- InfluxDB manager: [http://localhost:8085](http://localhost:8085)
+- InfluxDB manager: [http://localhost:18085](http://localhost:18085)
 
 Stop the suite with:
 
@@ -94,7 +94,7 @@ See [`DEPLOY_WINDOWS.md`](DEPLOY_WINDOWS.md) for Task Scheduler, watchdog, firew
 
 The server is defined in [`docker-compose.influxdb.yml`](docker-compose.influxdb.yml), exposes port `8086`, and persists data in Docker volumes `influxdb2_data` and `influxdb2_config`.
 
-From the manager on port `8085`:
+From the manager on port `18085`:
 
 1. Open **Lifecycle overview** and start the container.
 2. Open **Connection setup** and verify URL, organization, bucket, measurement, and token.
@@ -166,7 +166,7 @@ python services/daq_usb4716/mqtt_to_db.py
 
 DAQ (`8081`): `GET/POST /api/config`, `GET /api/status`, `POST /api/test_db`, `GET /api/scan_usb`, and Socket.IO control/status events.
 
-InfluxDB manager (`8085`): `GET/POST /api/config`, `GET /api/status`, `POST /api/start`, `POST /api/stop`, `POST /api/retention`, `POST /api/sync_daq`, and `GET /api/logs`.
+InfluxDB manager (`18085`): `GET/POST /api/config`, `GET /api/status`, `POST /api/start`, `POST /api/stop`, `POST /api/retention`, `POST /api/sync_daq`, and `GET /api/logs`.
 
 ## UI pattern system
 
@@ -216,7 +216,7 @@ Do not commit generated PID files, local logs, production credentials, API token
 Check port conflicts:
 
 ```bash
-lsof -nP -iTCP:8080 -iTCP:8081 -iTCP:8082 -iTCP:8083 -iTCP:8084 -iTCP:8085 -sTCP:LISTEN
+lsof -nP -iTCP:8080 -iTCP:8081 -iTCP:8082 -iTCP:8083 -iTCP:8084 -iTCP:18085 -sTCP:LISTEN
 ```
 
 If DAQ hardware is missing, verify DAQNavi, `DEVICE_DESCRIPTION`, and device permissions, or use mockup mode. If PostgreSQL fails, verify `DB_DSN` and run [`scripts/sql/db_setup.sql`](scripts/sql/db_setup.sql). If InfluxDB is offline, confirm Docker, port `8086`, and the manager's **Runtime logs** panel.

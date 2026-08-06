@@ -74,8 +74,8 @@ echo "[SYSTEM] Starting Database Plotter on Port 8084 (all interfaces)..."
 nohup $PYTHON_BIN services/plotter/app.py >/dev/null 2>&1 &
 echo $! > "$PLOTTER_PID_FILE"
 
-# 6. Start InfluxDB Manager (Port 8085)
-echo "[SYSTEM] Starting InfluxDB Manager on Port 8085 (all interfaces)..."
+# 6. Start InfluxDB Manager (Port 18085)
+echo "[SYSTEM] Starting InfluxDB Manager on Port 18085 (all interfaces)..."
 nohup $PYTHON_BIN services/influxdb/app.py >/dev/null 2>&1 &
 echo $! > "$INFLUXDB_MGR_PID_FILE"
 
@@ -85,5 +85,5 @@ echo "[SYSTEM] DAQ Control: http://localhost:8081"
 echo "[SYSTEM] Musashi II:  http://localhost:8082"
 echo "[SYSTEM] Musashi IV:  http://localhost:8083"
 echo "[SYSTEM] Plotter:     http://localhost:8084"
-echo "[SYSTEM] InfluxDB:    http://localhost:8085"
+echo "[SYSTEM] InfluxDB:    http://localhost:18085"
 echo "=========================================================="

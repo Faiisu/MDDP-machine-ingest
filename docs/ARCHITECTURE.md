@@ -19,7 +19,7 @@ flowchart TB
         S2[Musashi II console :8082]
         S4[Musashi IV console :8083]
         PLOT[Plotter :8084]
-        IM[Influx manager :8085]
+        IM[Influx manager :18085]
     end
 
     subgraph Data[Data systems]

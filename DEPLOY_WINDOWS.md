@@ -214,7 +214,7 @@ deploy\windows\run.bat
 [SYSTEM] Starting Musashi II Control Panel on Port 8082...
 [SYSTEM] Starting Musashi IV Control Panel on Port 8083...
 [SYSTEM] Starting Database Plotter on Port 8084...
-[SYSTEM] Starting InfluxDB Manager on Port 8085...
+[SYSTEM] Starting InfluxDB Manager on Port 18085...
 [SYSTEM] Services launched in background.
 [SYSTEM] Logs directory: logs\
 [SYSTEM] Accessible locally at http://localhost:8080
@@ -229,7 +229,7 @@ deploy\windows\run.bat
 
 Check port status:
 ```cmd
-netstat -an | findstr "LISTENING" | findstr "8080 8081 8082 8083 8084 8085"
+netstat -an | findstr "LISTENING" | findstr "8080 8081 8082 8083 8084 18085"
 ```
 
 ### Check Logs
@@ -316,7 +316,7 @@ Open **Task Scheduler** (search "Task Scheduler" in Start menu):
 
 The watchdog script (`watchdog.ps1`) runs every 5 minutes and:
 
-1. **Checks** if each service port (8080, 8081, 8082, 8083, 8084, 8085) has an active TCP listener
+1. **Checks** if each service port (8080, 8081, 8082, 8083, 8084, 18085) has an active TCP listener
 2. **Restarts** any service that is down by spawning a new background process
 3. **Logs** all actions to `logs\watchdog.log` with timestamps
 
@@ -335,10 +335,10 @@ type logs\watchdog.log
 
 Example output:
 ```
-2026-07-21 23:15:00 [HEARTBEAT] All services UP (8080, 8081, 8082, 8083, 8084, 8085)
-2026-07-21 23:20:00 [HEARTBEAT] All services UP (8080, 8081, 8082, 8083, 8084, 8085)
+2026-07-21 23:15:00 [HEARTBEAT] All services UP (8080, 8081, 8082, 8083, 8084, 18085)
+2026-07-21 23:20:00 [HEARTBEAT] All services UP (8080, 8081, 8082, 8083, 8084, 18085)
 2026-07-21 23:25:00 [RESTART] DAQ Panel (8081) was DOWN — restarted
-2026-07-21 23:30:00 [HEARTBEAT] All services UP (8080, 8081, 8082, 8083, 8084, 8085)
+2026-07-21 23:30:00 [HEARTBEAT] All services UP (8080, 8081, 8082, 8083, 8084, 18085)
 ```
 
 ---
@@ -366,7 +366,7 @@ New-NetFirewallRule -DisplayName "MDDP Musashi IV (8083)" -Direction Inbound -Pr
 New-NetFirewallRule -DisplayName "MDDP Plotter (8084)" -Direction Inbound -Protocol TCP -LocalPort 8084 -Action Allow
 
 # InfluxDB Manager
-New-NetFirewallRule -DisplayName "MDDP InfluxDB Manager (8085)" -Direction Inbound -Protocol TCP -LocalPort 8085 -Action Allow
+New-NetFirewallRule -DisplayName "MDDP InfluxDB Manager (18085)" -Direction Inbound -Protocol TCP -LocalPort 18085 -Action Allow
 ```
 
 ### Using Windows Defender Firewall GUI
@@ -404,7 +404,7 @@ New-NetFirewallRule -DisplayName "MDDP InfluxDB Manager (8085)" -Direction Inbou
 | Musashi II Panel | 8082 | `services\musashi_ii\app.py` |
 | Musashi IV Panel | 8083 | `services\musashi_iv\app.py` |
 | Plotter Visualizer | 8084 | `services\plotter\app.py` |
-| InfluxDB Manager | 8085 | `services\influxdb\app.py` |
+| InfluxDB Manager | 18085 | `services\influxdb\app.py` |
 
 ---
 

@@ -10,7 +10,7 @@ SERVICE_CATALOG = (
     {"id": "musashi-ii", "name": "Musashi II", "port": 8082, "path": "/"},
     {"id": "musashi-iv", "name": "Musashi IV", "port": 8083, "path": "/"},
     {"id": "plotter", "name": "Database Plotter", "port": 8084, "path": "/"},
-    {"id": "influx-manager", "name": "InfluxDB Manager", "port": 8085, "path": "/"},
+    {"id": "influx-manager", "name": "InfluxDB Manager", "port": 18085, "path": "/"},
     {"id": "influx", "name": "InfluxDB Server", "port": 8086, "path": "/health"},
 )
 

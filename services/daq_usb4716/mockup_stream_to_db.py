@@ -48,6 +48,8 @@ import threading
 import logging
 import queue
 import csv
+import urllib.request
+import urllib.parse
 from datetime import datetime, timezone
 
 import psycopg2
@@ -607,7 +609,8 @@ class InfluxDBClient:
         self.bucket = bucket or "daq_telemetry"
         self.measurement = measurement or "daq_telemetry"
         self.stop_event = stop_event or threading.Event()
-        self.write_url = f"{self.url}/api/v2/write?org={urllib.parse.quote(self.org)}&bucket={urllib.parse.quote(self.bucket)}&precision=s"
+        self.is_connected = False
+        self.write_url = f"{self.url}/api/v2/write?org={urllib.parse.quote(self.org)}&bucket={urllib.parse.quote(self.bucket)}&precision=ns"
 
     def connect(self):
         target_url = f"{self.url}/health"
@@ -617,22 +620,22 @@ class InfluxDBClient:
         try:
             req = urllib.request.Request(target_url, headers=headers, method="GET")
             with urllib.request.urlopen(req, timeout=3.0) as resp:
-                log.info(f"Connected to InfluxDB at {self.url} (Org: {self.org}, Bucket: {self.bucket})")
-                return True
+                if resp.status in (200, 204):
+                    self.is_connected = True
+                    log.info(f"Connected to InfluxDB at {self.url} (Org: {self.org}, Bucket: {self.bucket})")
+                    return True
+                else:
+                    self.is_connected = False
+                    log.warning(f"InfluxDB health check returned HTTP status {resp.status}")
+                    return True
         except Exception as e:
             log.warning(f"InfluxDB health check notice ({e}). Client will attempt line protocol writes.")
+            self.is_connected = True
             return True
 
-    def insert_batch(self, batch_tuples):
-        if not batch_tuples:
+    def send_samples(self, rows, page_size=1000):
+        if not rows:
             return
-        lines = []
-        for (wall_ts_ns, ch_idx, volt, scaled_val) in batch_tuples:
-            ts_sec = int(wall_ts_ns / 1e9)
-            fields = f"voltage={volt},scaled={scaled_val}"
-            lines.append(f"{self.measurement},ch={ch_idx} {fields} {ts_sec}")
-
-        body = "\n".join(lines).encode('utf-8')
         headers = {
             "Content-Type": "text/plain; charset=utf-8",
             "Accept": "application/json"
@@ -640,15 +643,36 @@ class InfluxDBClient:
         if self.token:
             headers["Authorization"] = f"Token {self.token}"
 
-        req = urllib.request.Request(self.write_url, data=body, headers=headers, method="POST")
-        with urllib.request.urlopen(req, timeout=4.0) as resp:
-            if resp.status not in (200, 204):
-                raise Exception(f"InfluxDB HTTP status {resp.status}")
+        for i in range(0, len(rows), page_size):
+            chunk = rows[i:i + page_size]
+            lines = []
+            for (sample_ts, ch_idx, val) in chunk:
+                if isinstance(sample_ts, datetime):
+                    ts_ns = int(sample_ts.timestamp() * 1_000_000_000)
+                elif isinstance(sample_ts, (int, float)):
+                    ts_ns = int(sample_ts * 1e9) if sample_ts < 1e11 else int(sample_ts)
+                else:
+                    ts_ns = int(time.time() * 1_000_000_000)
+                lines.append(f"{self.measurement},ch={ch_idx} value={val} {ts_ns}")
+
+            body = "\n".join(lines).encode('utf-8')
+            req = urllib.request.Request(self.write_url, data=body, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=5.0) as resp:
+                if resp.status not in (200, 204):
+                    raise Exception(f"InfluxDB HTTP status {resp.status}")
+        self.is_connected = True
+
+    def insert_batch(self, batch_tuples):
+        self.send_samples(batch_tuples)
 
     def publish_batch(self, batch_tuples):
-        self.insert_batch(batch_tuples)
+        self.send_samples(batch_tuples)
+
+    def rollback(self):
+        pass
 
     def disconnect(self):
+        self.is_connected = False
         log.info("InfluxDB client disconnected.")
 
 
@@ -778,7 +802,7 @@ def db_writer_thread():
                     log.error("[MockWriter] Queue full on re-queue — batch permanently lost!")
 
                 # Reconnect if connection was lost
-                conn_ok = getattr(client, 'is_connected', False) if destination == 'mqtt' else getattr(client, 'conn', None)
+                conn_ok = getattr(client, 'is_connected', False) if destination in ('mqtt', 'influxdb') else getattr(client, 'conn', None)
                 if not conn_ok:
                     log.info(f"[MockWriter] Reconnecting to {destination}...")
                     if not client.connect():

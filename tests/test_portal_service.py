@@ -37,4 +37,4 @@ def test_portal_service_status(monkeypatch, client):
 
     assert response.status_code == 200
     assert data['online'] == data['total'] == 6
-    assert {service['port'] for service in data['services']} == {8081, 8082, 8083, 8084, 8085, 8086}
+    assert {service['port'] for service in data['services']} == {8081, 8082, 8083, 8084, 18085, 8086}

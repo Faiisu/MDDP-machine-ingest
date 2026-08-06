@@ -81,8 +81,8 @@ echo [SYSTEM] Starting Database Plotter on Port 8084 (all interfaces)...
 start "MDDP_PLOTTER_SERVICE" /min cmd /c "title MDDP_PLOTTER_SERVICE && %PYTHON_BIN% services\plotter\app.py >> logs\plotter.log 2>&1"
 echo 1 > "%PLOTTER_PID_FILE%"
 
-rem 6. Start InfluxDB Manager (Port 8085)
-echo [SYSTEM] Starting InfluxDB Manager on Port 8085 (all interfaces)...
+rem 6. Start InfluxDB Manager (Port 18085)
+echo [SYSTEM] Starting InfluxDB Manager on Port 18085 (all interfaces)...
 start "MDDP_INFLUXDB_MANAGER" /min cmd /c "title MDDP_INFLUXDB_MANAGER && %PYTHON_BIN% services\influxdb\app.py >> logs\influxdb_manager.log 2>&1"
 echo 1 > "%INFLUXDB_MGR_PID_FILE%"
 

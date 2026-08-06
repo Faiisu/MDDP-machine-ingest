@@ -4,15 +4,15 @@
   "AUTO_START_ON_STARTUP": false,
   "CHANNEL_COUNT": 0,
   "CLOCK_RATE": 2000,
-  "DB_DSN": "postgresql://admin:admin@172.21.108.86:5432/daq_db",
-  "DB_HOST": "172.21.108.86",
+  "DB_DSN": "postgresql://admin:admin@localhost:8086/daq_db",
+  "DB_HOST": "localhost",
   "DB_NAME": "daq_db",
   "DB_PAGE_SIZE": 1000,
   "DB_PASSWORD": "admin",
-  "DB_PORT": "5432",
+  "DB_PORT": "8086",
   "DB_TABLE": "daq_telemetry",
   "DB_USER": "admin",
-  "DESTINATION": "postgresql",
+  "DESTINATION": "influxdb",
   "DEVICE_DESCRIPTION": "USB-4716,BID#0",
   "DI_CHANNEL_OFFSET": 100,
   "DI_PORT_COUNT": 1,
@@ -22,7 +22,7 @@
   "INFLUX_BUCKET": "sensor_data",
   "INFLUX_MEASUREMENT": "sensor_1",
   "INFLUX_ORG": "PTT",
-  "INFLUX_TOKEN": "",
+  "INFLUX_TOKEN": "thesecret1",
   "INFLUX_URL": "http://localhost:8086",
   "MQTT_BROKER": "localhost",
   "MQTT_CA_CERTS": "",
@@ -45,60 +45,60 @@
       "high_value": 50.0
     },
     "1": {
+      "stream": false,
       "enabled": false,
-      "high_value": 100,
+      "low_voltage": 0,
       "high_voltage": 50,
       "low_value": 0,
-      "low_voltage": 0,
-      "stream": false
+      "high_value": 100
     },
     "2": {
+      "stream": false,
       "enabled": false,
-      "high_value": 100,
+      "low_voltage": 0,
       "high_voltage": 10,
       "low_value": 0,
-      "low_voltage": 0,
-      "stream": false
+      "high_value": 100
     },
     "3": {
+      "stream": false,
       "enabled": true,
-      "high_value": 100,
+      "low_voltage": 0,
       "high_voltage": 10,
       "low_value": 0,
-      "low_voltage": 0,
-      "stream": false
+      "high_value": 100
     },
     "4": {
+      "stream": false,
       "enabled": false,
-      "high_value": 100,
+      "low_voltage": 0,
       "high_voltage": 10,
       "low_value": 0,
-      "low_voltage": 0,
-      "stream": false
+      "high_value": 100
     },
     "5": {
+      "stream": false,
       "enabled": false,
-      "high_value": 100,
+      "low_voltage": 0,
       "high_voltage": 10,
       "low_value": 0,
-      "low_voltage": 0,
-      "stream": false
+      "high_value": 100
     },
     "6": {
+      "stream": false,
       "enabled": false,
-      "high_value": 100,
+      "low_voltage": 0,
       "high_voltage": 10,
       "low_value": 0,
-      "low_voltage": 0,
-      "stream": false
+      "high_value": 100
     },
     "7": {
+      "stream": false,
       "enabled": false,
-      "high_value": 100,
+      "low_voltage": 0,
       "high_voltage": 10,
       "low_value": 0,
-      "low_voltage": 0,
-      "stream": false
+      "high_value": 100
     }
   },
   "SECTION_COUNT": 0,

@@ -291,5 +291,6 @@ def get_logs():
         return jsonify({'status': 'error', 'logs': f'Error fetching logs: {str(e)}'})
 
 if __name__ == '__main__':
-    print("[SYSTEM] Starting InfluxDB Management Service on Port 8085...")
-    app.run(host='0.0.0.0', port=8085, debug=False)
+    port = int(os.environ.get('PORT', os.environ.get('INFLUXDB_MANAGER_PORT', 18085)))
+    print(f"[SYSTEM] Starting InfluxDB Management Service on Port {port}...")
+    app.run(host='0.0.0.0', port=port, debug=False)
