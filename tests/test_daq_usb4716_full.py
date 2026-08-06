@@ -298,6 +298,54 @@ class TestFlaskAPI(unittest.TestCase):
         self.assertEqual(data.get('status'), 'success')
         self.assertIn('devices', data)
 
+    def test_database_connection_test_uses_current_submitted_dsn(self):
+        from unittest.mock import MagicMock
+
+        connection = MagicMock()
+        cursor = MagicMock()
+        connection.cursor.return_value.__enter__.return_value = cursor
+        dsn = 'postgresql://unsaved-user:unsaved-pass@db.example:5432/unsaved_db'
+
+        with patch('psycopg2.connect', return_value=connection) as connect:
+            response = self.app.post('/api/test_db', json={
+                'DESTINATION': 'postgresql',
+                'DB_DSN': dsn,
+            })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(json.loads(response.data)['success'])
+        connect.assert_called_once_with(dsn, connect_timeout=3)
+        cursor.execute.assert_called_once_with('SELECT 1')
+        connection.close.assert_called_once_with()
+
+    def test_connection_test_rejects_unknown_destination(self):
+        response = self.app.post('/api/test_db', json={'DESTINATION': 'unknown'})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(json.loads(response.data)['success'])
+
+    def test_mqtt_connection_test_opens_and_closes_client(self):
+        from unittest.mock import MagicMock
+
+        mqtt_client = MagicMock()
+
+        def trigger_connect_callback():
+            mqtt_client.on_connect(mqtt_client, None, {}, 0, None)
+
+        mqtt_client.loop_start.side_effect = trigger_connect_callback
+        with patch('paho.mqtt.client.Client', return_value=mqtt_client):
+            response = self.app.post('/api/test_db', json={
+                'DESTINATION': 'mqtt',
+                'MQTT_BROKER': 'broker.example',
+                'MQTT_PORT': 1883,
+            })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(json.loads(response.data)['success'])
+        mqtt_client.connect.assert_called_once_with('broker.example', 1883, keepalive=10)
+        mqtt_client.disconnect.assert_called_once_with()
+        mqtt_client.loop_stop.assert_called_once_with()
+
     def test_post_config_normalizes_di_end_port(self):
         with open(os.path.join(PROJECT_ROOT, "services", "daq_usb4716", "config.json"), "r", encoding="utf-8") as f:
             original = json.load(f)

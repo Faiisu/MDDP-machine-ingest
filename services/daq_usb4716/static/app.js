@@ -48,7 +48,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Setup destination toggle, TLS toggle, and sampling field listeners
     const destEl = document.getElementById('DESTINATION');
     if (destEl) {
-        destEl.addEventListener('change', toggleDestinationFields);
+        destEl.addEventListener('change', () => {
+            toggleDestinationFields();
+            resetConnectionTestStatus('Target changed — test again');
+        });
     }
     const tlsEl = document.getElementById('MQTT_TLS_ENABLED');
     if (tlsEl) {
@@ -84,6 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('start-btn').addEventListener('click', handleStartProcess);
     document.getElementById('stop-btn').addEventListener('click', handleStopProcess);
     document.getElementById('clear-console-btn').addEventListener('click', clearConsole);
+    document.getElementById('test-connection-btn')?.addEventListener('click', handleConnectionTest);
     
     // Setup Confirm Audit Modal Listeners
     document.getElementById('modal-close-btn')?.addEventListener('click', closeConfirmAuditModal);
@@ -313,11 +317,90 @@ function syncPostgresDsn() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    const destinationFieldIds = [
+        'DB_DSN', 'DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_NAME',
+        'INFLUX_URL', 'INFLUX_ORG', 'INFLUX_BUCKET', 'INFLUX_TOKEN',
+        'MQTT_BROKER', 'MQTT_PORT', 'MQTT_USERNAME', 'MQTT_PASSWORD',
+        'MQTT_TLS_ENABLED', 'MQTT_CA_CERTS', 'MQTT_CLIENT_CERT', 'MQTT_CLIENT_KEY'
+    ];
     ['DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_NAME'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.addEventListener('input', syncPostgresDsn);
     });
+    destinationFieldIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', () => resetConnectionTestStatus('Settings changed — test again'));
+        if (el) el.addEventListener('change', () => resetConnectionTestStatus('Settings changed — test again'));
+    });
 });
+
+function resetConnectionTestStatus(message = 'Not tested') {
+    const status = document.getElementById('connection-test-status');
+    const messageEl = document.getElementById('connection-test-message');
+    if (!status || !messageEl) return;
+    status.classList.remove('success', 'error', 'testing');
+    messageEl.textContent = message;
+}
+
+function setConnectionTestStatus(state, message) {
+    const status = document.getElementById('connection-test-status');
+    const messageEl = document.getElementById('connection-test-message');
+    if (!status || !messageEl) return;
+    status.classList.remove('success', 'error', 'testing');
+    if (state) status.classList.add(state);
+    messageEl.textContent = message;
+}
+
+function collectConnectionTestPayload() {
+    const ids = [
+        'DESTINATION', 'DB_DSN', 'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD',
+        'INFLUX_URL', 'INFLUX_ORG', 'INFLUX_BUCKET', 'INFLUX_TOKEN',
+        'MQTT_BROKER', 'MQTT_PORT', 'MQTT_TOPIC', 'MQTT_QOS', 'MQTT_USERNAME', 'MQTT_PASSWORD',
+        'MQTT_TLS_ENABLED', 'MQTT_CA_CERTS', 'MQTT_CLIENT_CERT', 'MQTT_CLIENT_KEY'
+    ];
+    const payload = {};
+    ids.forEach(id => {
+        const input = document.getElementById(id);
+        if (!input) return;
+        payload[input.name || id] = input.type === 'checkbox' ? input.checked : input.value;
+    });
+    return payload;
+}
+
+async function handleConnectionTest() {
+    const button = document.getElementById('test-connection-btn');
+    const label = button?.querySelector('span');
+    if (!button) return;
+
+    button.disabled = true;
+    button.classList.add('testing');
+    if (label) label.textContent = 'Testing...';
+    setConnectionTestStatus('testing', 'Contacting target...');
+
+    try {
+        const response = await fetch('/api/test_db', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(collectConnectionTestPayload())
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || `Connection test failed (HTTP ${response.status}).`);
+        }
+
+        setConnectionTestStatus('success', 'Connection successful');
+        showToast(data.message || 'Connection test successful.');
+        appendLog('SUCCESS', `[CONNECTION TEST] ${data.message || 'Connection successful.'}`);
+    } catch (error) {
+        setConnectionTestStatus('error', 'Connection failed');
+        showToast(error.message || 'Connection test failed.', true);
+        appendLog('ERROR', `[CONNECTION TEST] ${error.message || 'Connection test failed.'}`);
+    } finally {
+        button.disabled = false;
+        button.classList.remove('testing');
+        if (label) label.textContent = 'Test Connection';
+    }
+}
 
 function getBooleanControlValue(id, fallback = false) {
     const el = document.getElementById(id);

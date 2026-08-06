@@ -384,17 +384,35 @@ def save_config():
 
 @app.route('/api/test_db', methods=['POST'])
 def test_db():
-    req = request.get_json() or {}
+    req = request.get_json(silent=True) or {}
+    if not isinstance(req, dict):
+        return jsonify({'success': False, 'message': 'Connection test payload must be a JSON object.'}), 400
+
     cfg = read_config()
-    dest = req.get('DESTINATION') or req.get('destination') or cfg.get('DESTINATION', 'postgresql')
+
+    def setting(key, default=None):
+        """Use submitted form values when present, including an intentional blank."""
+        return req[key] if key in req else cfg.get(key, default)
+
+    if 'DESTINATION' in req:
+        raw_dest = req['DESTINATION']
+    elif 'destination' in req:
+        raw_dest = req['destination']
+    else:
+        raw_dest = cfg.get('DESTINATION', 'postgresql')
+    dest = str(raw_dest or 'postgresql').strip().lower()
+    if dest == 'database':
+        dest = 'postgresql'
+    if dest not in {'postgresql', 'influxdb', 'mqtt'}:
+        return jsonify({'success': False, 'message': f'Unsupported destination: {dest}'}), 400
 
     if dest == 'influxdb':
-        url = req.get('INFLUX_URL') or cfg.get('INFLUX_URL', 'http://localhost:8086')
-        token = req.get('INFLUX_TOKEN') or cfg.get('INFLUX_TOKEN', '')
-        org = req.get('INFLUX_ORG') or cfg.get('INFLUX_ORG', 'mddp')
-        bucket = req.get('INFLUX_BUCKET') or cfg.get('INFLUX_BUCKET', 'daq_telemetry')
+        url = str(setting('INFLUX_URL', 'http://localhost:8086') or '').strip().rstrip('/')
+        token = str(setting('INFLUX_TOKEN', '') or '').strip()
+        if not url:
+            return jsonify({'success': False, 'message': 'InfluxDB server URL is required.'})
 
-        target_url = f"{url.rstrip('/')}/health"
+        target_url = f"{url}/health"
         headers = {"User-Agent": "USB4716-TestClient"}
         if token:
             headers["Authorization"] = f"Token {token}"
@@ -404,30 +422,109 @@ def test_db():
             req_obj = urllib.request.Request(target_url, headers=headers, method="GET")
             with urllib.request.urlopen(req_obj, timeout=4.0) as resp:
                 if resp.status in (200, 204):
-                    return jsonify({'success': True, 'message': f'InfluxDB server at {url} is HEALTHY! (Org: {org}, Bucket: {bucket})'})
-                else:
-                    return jsonify({'success': False, 'message': f'InfluxDB returned HTTP status {resp.status}'})
+                    auth_note = ' Authentication was included.' if token else ' No API token was provided, so only server health was checked.'
+                    return jsonify({'success': True, 'message': f'InfluxDB server at {url} is healthy.{auth_note}'})
+                return jsonify({'success': False, 'message': f'InfluxDB returned HTTP status {resp.status}'})
         except Exception as e:
             return jsonify({'success': False, 'message': f'InfluxDB connection error: {str(e)}'})
-    elif dest == 'mqtt':
-        return jsonify({'success': True, 'message': 'MQTT Broker target configured.'})
-    else:
-        dsn = req.get('DB_DSN') or cfg.get('DB_DSN')
-        if not dsn:
-            host = req.get('DB_HOST') or cfg.get('DB_HOST', 'localhost')
-            port = req.get('DB_PORT') or cfg.get('DB_PORT', 5432)
-            user = req.get('DB_USER') or cfg.get('DB_USER', 'admin')
-            password = req.get('DB_PASSWORD') or cfg.get('DB_PASSWORD', 'admin')
-            dbname = req.get('DB_NAME') or cfg.get('DB_NAME', 'daq_db')
-            dsn = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
+
+    if dest == 'mqtt':
+        broker = str(setting('MQTT_BROKER', 'localhost') or '').strip()
+        if not broker:
+            return jsonify({'success': False, 'message': 'MQTT broker host is required.'})
 
         try:
-            import psycopg2
-            conn = psycopg2.connect(dsn, connect_timeout=3)
-            conn.close()
-            return jsonify({'success': True, 'message': 'PostgreSQL/TimescaleDB connection successful!'})
+            port = int(setting('MQTT_PORT', 1883))
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'message': 'MQTT broker port must be an integer.'})
+        if not 1 <= port <= 65535:
+            return jsonify({'success': False, 'message': 'MQTT broker port must be between 1 and 65535.'})
+
+        client = None
+        try:
+            import paho.mqtt.client as mqtt
+
+            try:
+                client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id='daq_usb4716_connection_test')
+            except (AttributeError, TypeError):
+                client = mqtt.Client(client_id='daq_usb4716_connection_test')
+
+            username = str(setting('MQTT_USERNAME', '') or '').strip()
+            password = setting('MQTT_PASSWORD', '') or ''
+            if username:
+                client.username_pw_set(username, password)
+
+            tls_value = setting('MQTT_TLS_ENABLED', False)
+            tls_enabled = (
+                tls_value if isinstance(tls_value, bool)
+                else str(tls_value).strip().lower() in {'1', 'true', 'yes', 'on'}
+            )
+            if tls_enabled:
+                import os
+                ca_certs = setting('MQTT_CA_CERTS', '') or None
+                certfile = setting('MQTT_CLIENT_CERT', '') or None
+                keyfile = setting('MQTT_CLIENT_KEY', '') or None
+                client.tls_set(
+                    ca_certs=ca_certs if ca_certs and os.path.exists(ca_certs) else None,
+                    certfile=certfile if certfile and os.path.exists(certfile) else None,
+                    keyfile=keyfile if keyfile and os.path.exists(keyfile) else None,
+                )
+
+            connected = threading.Event()
+            connection_error = []
+
+            def on_connect(_client, _userdata, _flags, rc, _properties=None):
+                rc_value = getattr(rc, 'value', rc)
+                if rc_value == 0:
+                    connected.set()
+                else:
+                    connection_error.append(f'broker returned code {rc_value}')
+                    connected.set()
+
+            client.on_connect = on_connect
+            client.connect(broker, port, keepalive=10)
+            client.loop_start()
+            connected.wait(timeout=3.0)
+
+            if connection_error:
+                return jsonify({'success': False, 'message': f'MQTT connection failed: {connection_error[0]}'})
+            if not connected.is_set():
+                return jsonify({'success': False, 'message': f'MQTT connection timed out at {broker}:{port}.'})
+            return jsonify({'success': True, 'message': f'MQTT broker connection successful at {broker}:{port}.'})
+        except ImportError:
+            return jsonify({'success': False, 'message': 'paho-mqtt is not installed. Install the DAQ service requirements.'})
         except Exception as e:
-            return jsonify({'success': False, 'message': f'PostgreSQL connection error: {str(e)}'})
+            return jsonify({'success': False, 'message': f'MQTT connection error: {str(e)}'})
+        finally:
+            try:
+                if client:
+                    client.disconnect()
+                    client.loop_stop()
+            except Exception:
+                pass
+
+    dsn = str(setting('DB_DSN', '') or '').strip()
+    if not dsn:
+        host = str(setting('DB_HOST', 'localhost') or '').strip()
+        port = setting('DB_PORT', 5432)
+        user = str(setting('DB_USER', 'admin') or '').strip()
+        password = setting('DB_PASSWORD', 'admin') or ''
+        dbname = str(setting('DB_NAME', 'daq_db') or '').strip()
+        if not host or not user or not dbname:
+            return jsonify({'success': False, 'message': 'Database host, username, and database name are required.'})
+        dsn = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
+
+    try:
+        import psycopg2
+        conn = psycopg2.connect(dsn, connect_timeout=3)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute('SELECT 1')
+        finally:
+            conn.close()
+        return jsonify({'success': True, 'message': 'PostgreSQL/TimescaleDB connection and query test successful.'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'PostgreSQL connection error: {str(e)}'})
 
 @app.route('/api/status', methods=['GET'])
 def get_status():
